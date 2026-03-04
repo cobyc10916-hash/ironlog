@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { colors } from './src/constants/colors';
+import Opening from './src/screens/onboarding/Opening';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <StatusBar style="light" />
+      <Opening />
     </View>
   );
 }
