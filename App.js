@@ -1,6 +1,6 @@
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import NotificationPermission from './src/screens/onboarding/NotificationPermission';
+import Notifications from './src/screens/onboarding/Notifications';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -11,7 +11,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <NotificationPermission />
+      <Notifications />
     </SafeAreaProvider>
   );
 }

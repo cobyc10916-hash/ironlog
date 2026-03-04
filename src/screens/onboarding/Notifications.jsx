@@ -7,7 +7,7 @@ import {
   ScrollView,
   Animated,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 
@@ -17,6 +17,23 @@ const PICKER_HEIGHT = ITEM_HEIGHT * 3;
 const HOURS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
 const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
 const PERIODS = ['AM', 'PM'];
+
+const LABEL1 = 'YOUR MORNING\nNOTIFICATION WILL LOOK LIKE THIS.';
+const LABEL2 = 'YOUR DANGER PERIOD NOTIFICATION WILL LOOK LIKE THIS.';
+const CHAR_DELAY = 60; // ms per character
+
+function typewriteText(fullText, setter, onComplete) {
+  setter('');
+  let i = 0;
+  const id = setInterval(() => {
+    i++;
+    setter(fullText.slice(0, i));
+    if (i >= fullText.length) {
+      clearInterval(id);
+      onComplete?.();
+    }
+  }, CHAR_DELAY);
+}
 
 function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
@@ -79,27 +96,52 @@ function TimePicker({ initialHour = 5, initialMinute = 0, initialPeriod = 0 }) {
 }
 
 export default function Notifications({ navigation }) {
-  const slideAnim = useRef(new Animated.Value(-120)).current;
-  const [notifShown, setNotifShown] = useState(false);
+  const insets = useSafeAreaInsets();
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const notif1Slide  = useRef(new Animated.Value(-200)).current;
+  const notif2Slide  = useRef(new Animated.Value(-200)).current;
+  const label1Opacity = useRef(new Animated.Value(0)).current;
+  const label2Opacity = useRef(new Animated.Value(0)).current;
+  const [overlayShown, setOverlayShown] = useState(false);
+  const [label1Text, setLabel1Text] = useState('');
+  const [label2Text, setLabel2Text] = useState('');
 
   const handleContinue = () => {
-    if (notifShown) return;
-    setNotifShown(true);
-    Animated.sequence([
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 380,
-        useNativeDriver: true,
-      }),
-      Animated.delay(3000),
-      Animated.timing(slideAnim, {
-        toValue: -120,
-        duration: 380,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      setNotifShown(false);
-      navigation?.navigate('Dashboard');
+    if (overlayShown) return;
+    setOverlayShown(true);
+
+    // Fade to black
+    Animated.timing(overlayOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+      // Typewrite label 1, then slide in notification 1
+      label1Opacity.setValue(1);
+      typewriteText(LABEL1, setLabel1Text, () => {
+        Animated.timing(notif1Slide, { toValue: 0, duration: 380, useNativeDriver: true }).start(() => {
+          setTimeout(() => {
+            Animated.timing(notif1Slide, { toValue: -200, duration: 380, useNativeDriver: true }).start(() => {
+              Animated.timing(label1Opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+                setLabel1Text('');
+                // Typewrite label 2, then slide in notification 2
+                label2Opacity.setValue(1);
+                typewriteText(LABEL2, setLabel2Text, () => {
+                  Animated.timing(notif2Slide, { toValue: 0, duration: 380, useNativeDriver: true }).start(() => {
+                    setTimeout(() => {
+                      Animated.timing(notif2Slide, { toValue: -200, duration: 380, useNativeDriver: true }).start(() => {
+                        Animated.timing(label2Opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+                          setLabel2Text('');
+                          Animated.timing(overlayOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+                            setOverlayShown(false);
+                            navigation?.navigate('Dashboard');
+                          });
+                        });
+                      });
+                    }, 2500);
+                  });
+                });
+              });
+            });
+          }, 2500);
+        });
+      });
     });
   };
 
@@ -144,26 +186,52 @@ export default function Notifications({ navigation }) {
         >
           <Text style={styles.continueText}>CONTINUE</Text>
         </TouchableOpacity>
-        <Text style={styles.hint}>
-          THIS IS WHAT YOUR DAILY NOTIFICATION LOOKS LIKE
-        </Text>
       </View>
 
-      {/* Mock iOS notification — rendered last so it overlays everything */}
-      {notifShown && (
-        <Animated.View
-          style={[styles.notifBanner, { transform: [{ translateY: slideAnim }] }]}
-        >
-          <View style={styles.notifIconBox}>
-            <Text style={styles.notifIconText}>I</Text>
-          </View>
-          <View style={styles.notifTextBox}>
-            <Text style={styles.notifTitle}>IRONLOG</Text>
-            <Text style={styles.notifMessage}>
-              Time to check in. Don't slip today.
-            </Text>
-          </View>
-        </Animated.View>
+      {/* Post-demo overlay */}
+      {overlayShown && (
+        <>
+          {/* Full-screen dark overlay */}
+          <Animated.View style={[styles.darkOverlay, { opacity: overlayOpacity }]} />
+
+          {/* Notification 1 */}
+          <Animated.View
+            style={[styles.notifBanner, { top: insets.top + 12, transform: [{ translateY: notif1Slide }] }]}
+          >
+            <View style={styles.notifIconBox}>
+              <Text style={styles.notifIconText}>I</Text>
+            </View>
+            <View style={styles.notifTextBox}>
+              <Text style={styles.notifTitle}>IRONLOG</Text>
+              <Text style={styles.notifMessage}>CRUSH IT TODAY.</Text>
+            </View>
+          </Animated.View>
+
+          {/* Label 1 */}
+          <Animated.View style={[styles.labelContainer, { opacity: label1Opacity }]}>
+            <Text style={[styles.labelText, { opacity: 0 }]}>{LABEL1}</Text>
+            <Text style={[styles.labelText, { position: 'absolute', top: 0, left: 0, right: 0 }]}>{label1Text}</Text>
+          </Animated.View>
+
+          {/* Notification 2 */}
+          <Animated.View
+            style={[styles.notifBanner, { top: insets.top + 12, transform: [{ translateY: notif2Slide }] }]}
+          >
+            <View style={styles.notifIconBox}>
+              <Text style={styles.notifIconText}>I</Text>
+            </View>
+            <View style={styles.notifTextBox}>
+              <Text style={styles.notifTitle}>IRONLOG</Text>
+              <Text style={styles.notifMessage}>DON'T FALL.</Text>
+            </View>
+          </Animated.View>
+
+          {/* Label 2 */}
+          <Animated.View style={[styles.labelContainer, { opacity: label2Opacity }]}>
+            <Text style={[styles.labelText, { opacity: 0 }]}>{LABEL2}</Text>
+            <Text style={[styles.labelText, { position: 'absolute', top: 0, left: 0, right: 0 }]}>{label2Text}</Text>
+          </Animated.View>
+        </>
       )}
     </SafeAreaView>
   );
@@ -189,11 +257,11 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontFamily: fonts.display,
-    fontSize: 11,
+    fontSize: 16,
     color: colors.white,
     letterSpacing: 3,
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 26,
     opacity: 0.85,
   },
   divider: {
@@ -251,7 +319,6 @@ const styles = StyleSheet.create({
   /* ── bottom ── */
   bottom: {
     alignItems: 'center',
-    gap: 16,
   },
   continueButton: {
     borderColor: colors.white,
@@ -268,13 +335,31 @@ const styles = StyleSheet.create({
     color: colors.white,
     letterSpacing: 8,
   },
-  hint: {
+  /* ── post-demo overlay ── */
+  darkOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    zIndex: 50,
+  },
+  labelContainer: {
+    position: 'absolute',
+    top: '60%',
+    left: 24,
+    right: 24,
+    zIndex: 52,
+  },
+  labelText: {
     fontFamily: fonts.display,
-    fontSize: 9,
+    fontSize: 18,
     color: colors.white,
-    opacity: 0.3,
+    opacity: 0.9,
     letterSpacing: 2,
     textAlign: 'center',
+    lineHeight: 28,
   },
 
   /* ── mock notification ── */
