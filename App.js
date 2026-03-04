@@ -3,8 +3,9 @@ import { StyleSheet, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { colors } from './src/constants/colors';
-import Opening from './src/screens/onboarding/Opening';
+import Intensity from './src/screens/onboarding/Intensity';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -24,10 +25,12 @@ export default function App() {
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar style="light" />
-      <Opening />
-    </View>
+    <SafeAreaProvider>
+      <View style={styles.container}>
+        <StatusBar style="light" />
+        <Intensity />
+      </View>
+    </SafeAreaProvider>
   );
 }
 
