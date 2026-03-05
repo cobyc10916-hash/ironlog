@@ -1,6 +1,6 @@
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import HomeScreen from './src/screens/HomeScreen';
+import Paywall from './src/screens/onboarding/Paywall';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -11,7 +11,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <HomeScreen />
+      <Paywall />
     </SafeAreaProvider>
   );
 }

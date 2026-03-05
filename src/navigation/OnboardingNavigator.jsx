@@ -10,7 +10,7 @@ const Stack = createNativeStackNavigator();
 
 export default function OnboardingNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Paywall">
       <Stack.Screen name="Opening" component={Opening} />
       <Stack.Screen name="Intensity" component={Intensity} />
       <Stack.Screen name="Notifications" component={Notifications} />
