@@ -49,11 +49,10 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   content: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
   },
   headline: {
@@ -65,6 +64,10 @@ const styles = StyleSheet.create({
     lineHeight: 42,
   },
   bottom: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    right: 24,
     alignItems: 'center',
     gap: 20,
   },

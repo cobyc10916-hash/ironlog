@@ -1,45 +1,317 @@
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useState, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 
-const STREAK = 21;
 const LONGEST_STREAK = 50;
+const HOLD_DURATION = 3000;
+const GAP = 4;
+const STROKE = 4;
+const BUTTON_RADIUS = 8;
+const QUOTE = 'THE ONLY WAY\nOUT IS THROUGH.';
+
+const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+function getRingMetrics(bw, bh) {
+  const pw = bw + 2 * GAP + STROKE;
+  const ph = bh + 2 * GAP + STROKE;
+  const prx = BUTTON_RADIUS + GAP + STROKE / 2;
+  const svgW = bw + 2 * (GAP + STROKE);
+  const svgH = bh + 2 * (GAP + STROKE);
+  const ox = STROKE / 2;
+  const oy = STROKE / 2;
+  const cx = ox + pw / 2;
+
+  const d = [
+    `M ${cx} ${oy}`,
+    `L ${ox + pw - prx} ${oy}`,
+    `A ${prx} ${prx} 0 0 1 ${ox + pw} ${oy + prx}`,
+    `L ${ox + pw} ${oy + ph - prx}`,
+    `A ${prx} ${prx} 0 0 1 ${ox + pw - prx} ${oy + ph}`,
+    `L ${ox + prx} ${oy + ph}`,
+    `A ${prx} ${prx} 0 0 1 ${ox} ${oy + ph - prx}`,
+    `L ${ox} ${oy + prx}`,
+    `A ${prx} ${prx} 0 0 1 ${ox + prx} ${oy}`,
+    `L ${cx} ${oy}`,
+  ].join(' ');
+
+  const perimeter = 2 * (pw + ph) + prx * (2 * Math.PI - 8);
+  return { svgW, svgH, d, perimeter };
+}
 
 export default function HomeScreen() {
+  const [streak, setStreak] = useState(189);
+  const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
+  const [visibleChars, setVisibleChars] = useState(0);
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const progress = useRef(new Animated.Value(0)).current;
+  const flashOpacity = useRef(new Animated.Value(0)).current;
+  const numberOpacity = useRef(new Animated.Value(1)).current;
+  const quoteOpacity = useRef(new Animated.Value(0)).current;
+  const buttonScale = useRef(new Animated.Value(1)).current;
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+
+  const holdAnim = useRef(null);
+  const pulseLoop = useRef(null);
+  const hapticTimers = useRef([]);
+  const typewriterTimers = useRef([]);
+  const isComplete = useRef(false);
+  const isAnimating = useRef(false);
+
+  const clearHapticTimers = () => {
+    hapticTimers.current.forEach(clearTimeout);
+    hapticTimers.current = [];
+  };
+
+  const clearTypewriter = () => {
+    typewriterTimers.current.forEach(clearTimeout);
+    typewriterTimers.current = [];
+  };
+
+  const startTypewriter = (onComplete) => {
+    const charDelay = 1800 / QUOTE.length;
+    let i = 0;
+    const tick = () => {
+      i++;
+      setVisibleChars(i);
+      if (i < QUOTE.length) {
+        typewriterTimers.current.push(setTimeout(tick, charDelay));
+      } else {
+        onComplete();
+      }
+    };
+    typewriterTimers.current.push(setTimeout(tick, charDelay));
+  };
+
+  const startPulse = () => {
+    pulseLoop.current = Animated.loop(
+      Animated.sequence([
+        Animated.timing(buttonScale, { toValue: 1.03, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+        Animated.timing(buttonScale, { toValue: 1.0, duration: 500, easing: Easing.inOut(Easing.ease), useNativeDriver: true }),
+      ])
+    );
+    pulseLoop.current.start();
+  };
+
+  const stopPulse = () => {
+    pulseLoop.current?.stop();
+    Animated.timing(buttonScale, { toValue: 1.0, duration: 150, useNativeDriver: true }).start();
+  };
+
+  // Called when 3s hold completes — shows confirmation overlay
+  const handleHoldComplete = () => {
+    stopPulse();
+    isComplete.current = true;
+    clearHapticTimers();
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    overlayOpacity.setValue(0);
+    setShowConfirm(true);
+    Animated.timing(overlayOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+  };
+
+  // Called after YES is confirmed — runs the actual reset sequence
+  const performReset = () => {
+    isAnimating.current = true;
+
+    Animated.sequence([
+      Animated.timing(flashOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
+      Animated.timing(flashOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => {
+      Animated.timing(numberOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+        setVisibleChars(0);
+        quoteOpacity.setValue(1);
+        startTypewriter(() => {
+          setTimeout(() => {
+            Animated.timing(quoteOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+              setStreak(0);
+              Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+                progress.setValue(0);
+                clearTypewriter();
+                isAnimating.current = false;
+                isComplete.current = false;
+              });
+            });
+          }, 1500);
+        });
+      });
+    });
+  };
+
+  const handleConfirmYes = () => {
+    Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setShowConfirm(false);
+      performReset();
+    });
+  };
+
+  const handleConfirmNo = () => {
+    Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setShowConfirm(false);
+      isComplete.current = false;
+      Animated.timing(progress, { toValue: 0, duration: 150, easing: Easing.linear, useNativeDriver: false }).start();
+    });
+  };
+
+  const handlePressIn = () => {
+    if (isAnimating.current || showConfirm) return;
+
+    if (streak === 0) {
+      Animated.sequence([
+        Animated.timing(buttonScale, { toValue: 1.05, duration: 100, useNativeDriver: true }),
+        Animated.timing(buttonScale, { toValue: 1.0, duration: 200, useNativeDriver: true }),
+      ]).start();
+      return;
+    }
+
+    isComplete.current = false;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    hapticTimers.current = [
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium), 1000),
+      setTimeout(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy), 2000),
+    ];
+
+    startPulse();
+    progress.setValue(0);
+    holdAnim.current = Animated.timing(progress, {
+      toValue: 1,
+      duration: HOLD_DURATION,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    holdAnim.current.start(({ finished }) => {
+      if (finished) handleHoldComplete();
+    });
+  };
+
+  const handlePressOut = () => {
+    if (streak === 0 || isComplete.current || isAnimating.current) return;
+    stopPulse();
+    holdAnim.current?.stop();
+    clearHapticTimers();
+    Animated.timing(progress, {
+      toValue: 0,
+      duration: 150,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const { svgW, svgH, d, perimeter } = getRingMetrics(buttonLayout.width, buttonLayout.height);
+
+  const dashOffset = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [perimeter, 0],
+    extrapolate: 'clamp',
+  });
+
   return (
     <SafeAreaView style={styles.root}>
-      {/* Top icons */}
       <View style={styles.topBar}>
         <Ionicons name="shield-outline" size={22} color={colors.white} />
         <Ionicons name="settings-outline" size={22} color={colors.white} />
       </View>
 
-      {/* YOU VS YOU — floated halfway between top bar and center block */}
       <View style={styles.youVsYouContainer}>
         <Text style={styles.youVsYou}>YOU VS YOU</Text>
       </View>
 
-      {/* Center content */}
       <View style={styles.center}>
         <Text style={styles.daysClean}>DAYS CLEAN</Text>
         <View style={styles.miniDivider} />
-        <Text style={styles.streakNumber}>{STREAK}</Text>
 
-        <TouchableOpacity style={styles.resetButton} activeOpacity={0.8}>
-          <Text style={styles.resetText}>RESET</Text>
-        </TouchableOpacity>
+        <View style={styles.numberContainer}>
+          <Animated.Text
+            style={[
+              styles.streakNumber,
+              { opacity: numberOpacity },
+              streak.toString().length < 4 ? { lineHeight: 160 } : {},
+            ]}
+            adjustsFontSizeToFit={streak.toString().length >= 4}
+            numberOfLines={1}
+          >
+            {streak}
+          </Animated.Text>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: quoteOpacity }]}
+          >
+            <Text style={styles.quoteText}>
+              <Text style={{ color: colors.white }}>{QUOTE.slice(0, visibleChars)}</Text>
+              <Text style={{ color: 'transparent' }}>{QUOTE.slice(visibleChars)}</Text>
+            </Text>
+          </Animated.View>
+        </View>
+
+        <Animated.View style={[styles.resetWrapper, { transform: [{ scale: buttonScale }] }]}>
+          {buttonLayout.width > 0 && (
+            <Svg
+              width={svgW}
+              height={svgH}
+              style={[styles.progressRingSvg, { top: -(GAP + STROKE), left: -(GAP + STROKE) }]}
+              pointerEvents="none"
+            >
+              <AnimatedPath
+                d={d}
+                stroke={colors.white}
+                strokeWidth={STROKE}
+                strokeDasharray={[perimeter]}
+                strokeDashoffset={dashOffset}
+                strokeLinecap="round"
+                fill="none"
+              />
+            </Svg>
+          )}
+
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            activeOpacity={1}
+            onLayout={(e) =>
+              setButtonLayout({
+                width: e.nativeEvent.layout.width,
+                height: e.nativeEvent.layout.height,
+              })
+            }
+          >
+            <Animated.View
+              style={[StyleSheet.absoluteFillObject, styles.flashOverlay, { opacity: flashOpacity }]}
+            />
+            <Text style={styles.resetText}>RESET</Text>
+          </TouchableOpacity>
+        </Animated.View>
       </View>
 
-      {/* Balancing spacer so center block is truly centered */}
       <View style={styles.bottomSpacer} />
 
-      {/* Bottom */}
       <View style={styles.bottom}>
         <View style={styles.divider} />
         <Text style={styles.longestStreak}>LONGEST STREAK: {LONGEST_STREAK} DAYS</Text>
       </View>
+
+      {/* Confirmation overlay — Modal covers full screen including safe areas */}
+      <Modal
+        visible={showConfirm}
+        transparent
+        animationType="none"
+        statusBarTranslucent
+      >
+        <Animated.View style={[styles.overlay, { opacity: overlayOpacity }]}>
+          <Text style={styles.confirmHeadline}>ARE YOU SURE?</Text>
+          <View style={styles.confirmButtons}>
+            <TouchableOpacity style={styles.noButton} onPress={handleConfirmNo} activeOpacity={0.8}>
+              <Text style={styles.noText}>NO</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.yesButton} onPress={handleConfirmYes} activeOpacity={0.8}>
+              <Text style={styles.yesText}>YES</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -88,12 +360,35 @@ const styles = StyleSheet.create({
     color: colors.white,
     letterSpacing: 8,
   },
+  numberContainer: {
+    height: 160,
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 48,
+  },
   streakNumber: {
     fontFamily: fonts.display,
     fontSize: 160,
     color: colors.white,
-    lineHeight: 160,
-    marginVertical: 48,
+    letterSpacing: -6,
+  },
+  quoteContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quoteText: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    textAlign: 'center',
+    letterSpacing: 3,
+    lineHeight: 30,
+  },
+  resetWrapper: {
+    marginTop: 16,
+  },
+  progressRingSvg: {
+    position: 'absolute',
   },
   resetButton: {
     borderColor: colors.white,
@@ -102,7 +397,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     paddingVertical: 14,
     paddingHorizontal: 48,
-    marginTop: 16,
+    overflow: 'hidden',
+  },
+  flashOverlay: {
+    backgroundColor: colors.white,
+    borderRadius: 8,
   },
   resetText: {
     fontFamily: fonts.display,
@@ -127,5 +426,53 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: colors.white,
     letterSpacing: 3,
+  },
+  // Confirmation overlay
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(10, 10, 10, 0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  confirmHeadline: {
+    fontFamily: fonts.display,
+    fontSize: 26,
+    color: colors.white,
+    letterSpacing: 4,
+    textAlign: 'center',
+    marginBottom: 40,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: 16,
+  },
+  yesButton: {
+    flex: 1,
+    borderColor: colors.white,
+    borderWidth: 2,
+    borderRadius: 8,
+    backgroundColor: colors.background,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  yesText: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    color: colors.white,
+    letterSpacing: 6,
+  },
+  noButton: {
+    flex: 1,
+    borderRadius: 8,
+    backgroundColor: colors.white,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  noText: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    color: colors.background,
+    letterSpacing: 6,
   },
 });

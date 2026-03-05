@@ -69,16 +69,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 40,
+    justifyContent: 'center',
     paddingHorizontal: 24,
   },
 
   /* ── centered group ── */
   group: {
-    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
     width: '100%',
     gap: 0,
   },
@@ -124,7 +121,9 @@ const styles = StyleSheet.create({
 
   /* ── sign in ── */
   signInHitArea: {
-    paddingVertical: 20,
+    position: 'absolute',
+    bottom: 20,
+    paddingVertical: 8,
     paddingHorizontal: 24,
   },
   signIn: {

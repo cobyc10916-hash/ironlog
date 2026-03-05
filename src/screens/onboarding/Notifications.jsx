@@ -242,13 +242,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    justifyContent: 'center',
   },
 
   /* ── layout ── */
   content: {
-    flex: 1,
-    justifyContent: 'center',
     gap: 40,
   },
   section: {
@@ -318,6 +316,10 @@ const styles = StyleSheet.create({
 
   /* ── bottom ── */
   bottom: {
+    position: 'absolute',
+    bottom: 24,
+    left: 24,
+    right: 24,
     alignItems: 'center',
   },
   continueButton: {
