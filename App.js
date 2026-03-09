@@ -1,6 +1,6 @@
 import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import CalendarScreen from './src/screens/CalendarScreen';
+import BadgeScreen from './src/screens/BadgeScreen';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
@@ -11,7 +11,7 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <CalendarScreen onBack={() => {}} />
+      <BadgeScreen />
     </SafeAreaProvider>
   );
 }
