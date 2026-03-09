@@ -13,6 +13,7 @@ const GAP = 4;
 const STROKE = 4;
 const BUTTON_RADIUS = 8;
 const QUOTE = 'THE ONLY WAY\nOUT IS THROUGH.';
+const LOGGED_TEXT = 'LOGGED.';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -44,15 +45,18 @@ function getRingMetrics(bw, bh) {
 }
 
 export default function HomeScreen({ navigation }) {
-  const [streak, setStreak] = useState(189);
+  const [streak, setStreak] = useState(132);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [daysCleanWidth, setDaysCleanWidth] = useState(0);
+  const [loggedVisibleChars, setLoggedVisibleChars] = useState(0);
 
   const progress = useRef(new Animated.Value(0)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const numberOpacity = useRef(new Animated.Value(1)).current;
   const quoteOpacity = useRef(new Animated.Value(0)).current;
+  const loggedOpacity = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
 
@@ -60,8 +64,10 @@ export default function HomeScreen({ navigation }) {
   const pulseLoop = useRef(null);
   const hapticTimers = useRef([]);
   const typewriterTimers = useRef([]);
+  const loggedTypewriterTimers = useRef([]);
   const isComplete = useRef(false);
   const isAnimating = useRef(false);
+  const lastQuoteTime = useRef(0);
 
   const clearHapticTimers = () => {
     hapticTimers.current.forEach(clearTimeout);
@@ -71,6 +77,11 @@ export default function HomeScreen({ navigation }) {
   const clearTypewriter = () => {
     typewriterTimers.current.forEach(clearTimeout);
     typewriterTimers.current = [];
+  };
+
+  const clearLoggedTypewriter = () => {
+    loggedTypewriterTimers.current.forEach(clearTimeout);
+    loggedTypewriterTimers.current = [];
   };
 
   const startTypewriter = (onComplete) => {
@@ -86,6 +97,21 @@ export default function HomeScreen({ navigation }) {
       }
     };
     typewriterTimers.current.push(setTimeout(tick, charDelay));
+  };
+
+  const startLoggedTypewriter = (onComplete) => {
+    const charDelay = 1000 / LOGGED_TEXT.length;
+    let i = 0;
+    const tick = () => {
+      i++;
+      setLoggedVisibleChars(i);
+      if (i < LOGGED_TEXT.length) {
+        loggedTypewriterTimers.current.push(setTimeout(tick, charDelay));
+      } else {
+        onComplete();
+      }
+    };
+    loggedTypewriterTimers.current.push(setTimeout(tick, charDelay));
   };
 
   const startPulse = () => {
@@ -115,7 +141,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   // Called after YES is confirmed — runs the actual reset sequence
-  const performReset = () => {
+  const performReset = (withQuote) => {
     isAnimating.current = true;
 
     Animated.sequence([
@@ -123,21 +149,38 @@ export default function HomeScreen({ navigation }) {
       Animated.timing(flashOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
       Animated.timing(numberOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-        setVisibleChars(0);
-        quoteOpacity.setValue(1);
-        startTypewriter(() => {
-          setTimeout(() => {
-            Animated.timing(quoteOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-              setStreak(0);
-              Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+        if (withQuote) {
+          lastQuoteTime.current = Date.now();
+          setVisibleChars(0);
+          quoteOpacity.setValue(1);
+          startTypewriter(() => {
+            setTimeout(() => {
+              Animated.timing(quoteOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+                setStreak(0);
                 progress.setValue(0);
                 clearTypewriter();
                 isAnimating.current = false;
                 isComplete.current = false;
+                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
               });
-            });
-          }, 1500);
-        });
+            }, 1500);
+          });
+        } else {
+          loggedOpacity.setValue(1);
+          startLoggedTypewriter(() => {
+            setTimeout(() => {
+              Animated.timing(loggedOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => {
+                setLoggedVisibleChars(0);
+                setStreak(0);
+                progress.setValue(0);
+                clearLoggedTypewriter();
+                isAnimating.current = false;
+                isComplete.current = false;
+                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+              });
+            }, 800);
+          });
+        }
       });
     });
   };
@@ -145,7 +188,8 @@ export default function HomeScreen({ navigation }) {
   const handleConfirmYes = () => {
     Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
       setShowConfirm(false);
-      performReset();
+      const withQuote = Date.now() - lastQuoteTime.current >= 3600000;
+      performReset(withQuote);
     });
   };
 
@@ -159,14 +203,6 @@ export default function HomeScreen({ navigation }) {
 
   const handlePressIn = () => {
     if (isAnimating.current || showConfirm) return;
-
-    if (streak === 0) {
-      Animated.sequence([
-        Animated.timing(buttonScale, { toValue: 1.05, duration: 100, useNativeDriver: true }),
-        Animated.timing(buttonScale, { toValue: 1.0, duration: 200, useNativeDriver: true }),
-      ]).start();
-      return;
-    }
 
     isComplete.current = false;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -189,7 +225,7 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handlePressOut = () => {
-    if (streak === 0 || isComplete.current || isAnimating.current) return;
+    if (isComplete.current || isAnimating.current) return;
     stopPulse();
     holdAnim.current?.stop();
     clearHapticTimers();
@@ -233,8 +269,8 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.center}>
-        <Text style={styles.daysClean}>DAYS CLEAN</Text>
-        <View style={styles.miniDivider} />
+        <Text style={styles.daysClean} onLayout={(e) => setDaysCleanWidth(e.nativeEvent.layout.width)}>DAYS CLEAN</Text>
+        <View style={[styles.miniDivider, { width: (60 + daysCleanWidth) / 2 }]} />
 
         <TouchableOpacity
           style={styles.numberContainer}
@@ -258,6 +294,14 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.quoteText}>
               <Text style={{ color: colors.white }}>{QUOTE.slice(0, visibleChars)}</Text>
               <Text style={{ color: 'transparent' }}>{QUOTE.slice(visibleChars)}</Text>
+            </Text>
+          </Animated.View>
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: loggedOpacity }]}
+          >
+            <Text style={styles.quoteText}>
+              <Text style={{ color: colors.white }}>{LOGGED_TEXT.slice(0, loggedVisibleChars)}</Text>
+              <Text style={{ color: 'transparent' }}>{LOGGED_TEXT.slice(loggedVisibleChars)}</Text>
             </Text>
           </Animated.View>
         </TouchableOpacity>
@@ -363,7 +407,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   miniDivider: {
-    width: 60,
     height: 1,
     backgroundColor: colors.white,
     opacity: 0.5,
@@ -381,6 +424,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginVertical: 48,
+    paddingTop: 24,
   },
   streakNumber: {
     fontFamily: fonts.display,
