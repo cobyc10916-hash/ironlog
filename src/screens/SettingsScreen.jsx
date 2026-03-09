@@ -14,7 +14,6 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
-import LogHistoricalResetScreen from './LogHistoricalResetScreen';
 
 // ─── Hold ring constants ───────────────────────────────────────────────────────
 const RING_GAP    = 4;
@@ -160,8 +159,7 @@ const DeleteConfirmModal = ({ visible, onYes, onNo }) => {
             {btnLayout.width > 0 && (
               <Svg
                 width={svgW} height={svgH}
-                style={[styles.ringSvg, { top: -(RING_GAP + RING_STROKE), left: -(RING_GAP + RING_STROKE) }]}
-                pointerEvents="none"
+                style={[styles.ringSvg, { top: -(RING_GAP + RING_STROKE), left: -(RING_GAP + RING_STROKE) }, { pointerEvents: 'none' }]}
               >
                 <AnimatedPath
                   d={d} stroke={colors.white} strokeWidth={RING_STROKE}
@@ -198,7 +196,6 @@ export default function SettingsScreen({
 }) {
   const [modalType, setModalType] = useState(null); // 'signout' | 'delete' | null
   const [restoreLabel, setRestoreLabel] = useState(null); // null | 'RESTORED'
-  const [showLogReset, setShowLogReset] = useState(false);
 
   const openModal = (type) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -248,7 +245,7 @@ export default function SettingsScreen({
         <View style={styles.group}>
           <SettingsRow
             label="LOG PAST RELAPSE"
-            onPress={() => setShowLogReset(true)}
+            onPress={() => navigation?.navigate('LogHistoricalReset')}
           />
           <SettingsRow
             label="SIGN OUT"
@@ -314,16 +311,6 @@ export default function SettingsScreen({
         onNo={closeModal}
       />
 
-      {/* Log Historical Reset — inline full-screen overlay */}
-      {showLogReset && (
-        <View style={StyleSheet.absoluteFill}>
-          <LogHistoricalResetScreen
-            onBack={() => setShowLogReset(false)}
-            onConfirmReset={(dateString) => console.log('onConfirmReset', dateString)}
-            installDate="2025-01-01"
-          />
-        </View>
-      )}
 
     </SafeAreaView>
   );

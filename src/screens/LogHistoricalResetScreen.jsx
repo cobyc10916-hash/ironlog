@@ -214,6 +214,7 @@ const ScrollPickerColumn = React.memo(function ScrollPickerColumn({
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function LogHistoricalResetScreen({
+  navigation,
   onBack,
   onConfirmReset,
   installDate,
@@ -221,6 +222,7 @@ export default function LogHistoricalResetScreen({
   cleanDays   = new Set(),
   relapseDays = new Set(),
 }) {
+  const goBack = () => { navigation?.goBack(); onBack?.(); };
 
   // ── Date bounds ──────────────────────────────────────────────────────────────
   const { minDate, yesterday, noDatesAvailable } = useMemo(() => {
@@ -384,7 +386,7 @@ export default function LogHistoricalResetScreen({
     progress.setValue(0);
     const payload = calculateResetData(dateString, cleanDays, relapseDays);
     onConfirmReset?.(dateString, payload);
-    onBack?.();
+    goBack();
   };
 
   const handleNo = () => {
@@ -406,7 +408,7 @@ export default function LogHistoricalResetScreen({
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={onBack}
+          onPress={goBack}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
@@ -423,8 +425,8 @@ export default function LogHistoricalResetScreen({
           <View style={styles.pickerGroup}>
             <Text style={styles.instruction}>SELECT THE DATE YOU RELAPSED</Text>
             <View style={styles.pickerRow}>
-              <View style={[styles.selLine, { top: ITEM_H * PAD }]}       pointerEvents="none" />
-              <View style={[styles.selLine, { top: ITEM_H * (PAD + 1) }]} pointerEvents="none" />
+              <View style={[styles.selLine, { top: ITEM_H * PAD },       { pointerEvents: 'none' }]} />
+              <View style={[styles.selLine, { top: ITEM_H * (PAD + 1) }, { pointerEvents: 'none' }]} />
 
               <ScrollPickerColumn
                 key={`d-${validDays[0]}-${validDays[validDays.length - 1]}`}
@@ -475,8 +477,8 @@ export default function LogHistoricalResetScreen({
               style={[
                 styles.progressRingSvg,
                 { top: -(GAP + STROKE), left: -(GAP + STROKE) },
+                { pointerEvents: 'none' },
               ]}
-              pointerEvents="none"
             >
               <AnimatedPath
                 d={ringPath}

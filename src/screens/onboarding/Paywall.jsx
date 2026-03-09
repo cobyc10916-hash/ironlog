@@ -48,7 +48,7 @@ export default function Paywall() {
   return (
     <View style={styles.root}>
       {/* Phase 1: centered text */}
-      <View style={styles.textPhase} pointerEvents="none">
+      <View style={[styles.textPhase, { pointerEvents: 'none' }]}>
         <Animated.Text style={[styles.headline, { opacity: line1Opacity }]}>
           NO HAND HOLDING.
         </Animated.Text>

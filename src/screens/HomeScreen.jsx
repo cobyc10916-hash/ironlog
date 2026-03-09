@@ -43,7 +43,7 @@ function getRingMetrics(bw, bh) {
   return { svgW, svgH, d, perimeter };
 }
 
-export default function HomeScreen() {
+export default function HomeScreen({ navigation }) {
   const [streak, setStreak] = useState(189);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
@@ -212,8 +212,20 @@ export default function HomeScreen() {
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.topBar}>
-        <Ionicons name="shield-outline" size={22} color={colors.white} />
-        <Ionicons name="settings-outline" size={22} color={colors.white} />
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Badge')}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="shield-outline" size={22} color={colors.white} />
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Settings')}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Ionicons name="settings-outline" size={22} color={colors.white} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.youVsYouContainer}>
@@ -224,7 +236,11 @@ export default function HomeScreen() {
         <Text style={styles.daysClean}>DAYS CLEAN</Text>
         <View style={styles.miniDivider} />
 
-        <View style={styles.numberContainer}>
+        <TouchableOpacity
+          style={styles.numberContainer}
+          onPress={() => navigation.navigate('Calendar')}
+          activeOpacity={0.8}
+        >
           <Animated.Text
             style={[
               styles.streakNumber,
@@ -244,15 +260,14 @@ export default function HomeScreen() {
               <Text style={{ color: 'transparent' }}>{QUOTE.slice(visibleChars)}</Text>
             </Text>
           </Animated.View>
-        </View>
+        </TouchableOpacity>
 
         <Animated.View style={[styles.resetWrapper, { transform: [{ scale: buttonScale }] }]}>
           {buttonLayout.width > 0 && (
             <Svg
               width={svgW}
               height={svgH}
-              style={[styles.progressRingSvg, { top: -(GAP + STROKE), left: -(GAP + STROKE) }]}
-              pointerEvents="none"
+              style={[styles.progressRingSvg, { top: -(GAP + STROKE), left: -(GAP + STROKE) }, { pointerEvents: 'none' }]}
             >
               <AnimatedPath
                 d={d}

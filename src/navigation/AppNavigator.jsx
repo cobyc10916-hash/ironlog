@@ -1,41 +1,28 @@
-import React from 'react';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createStackNavigator } from '@react-navigation/stack';
+import HomeScreen from '../screens/HomeScreen';
+import CalendarScreen from '../screens/CalendarScreen';
+import BadgeScreen from '../screens/BadgeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import LogHistoricalResetScreen from '../screens/LogHistoricalResetScreen';
 import Intensity from '../screens/onboarding/Intensity';
 import Notifications from '../screens/onboarding/Notifications';
 
-const Stack = createNativeStackNavigator();
+const Stack = createStackNavigator();
 
 export default function AppNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="Settings"
-      screenOptions={{ headerShown: false }}
+      initialRouteName="Home"
+      detachInactiveScreens={false}
+      screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
     >
-      <Stack.Screen name="Settings"      component={SettingsScreen} />
-      <Stack.Screen name="Intensity"     component={Intensity} />
-      <Stack.Screen name="Notifications" component={Notifications} />
+      <Stack.Screen name="Home"                 component={HomeScreen} />
+      <Stack.Screen name="Calendar"             component={CalendarScreen} />
+      <Stack.Screen name="Badge"                component={BadgeScreen} />
+      <Stack.Screen name="Settings"             component={SettingsScreen} />
+      <Stack.Screen name="LogHistoricalReset"   component={LogHistoricalResetScreen} />
+      <Stack.Screen name="Intensity"            component={Intensity} />
+      <Stack.Screen name="Notifications"        component={Notifications} />
     </Stack.Navigator>
   );
 }
-
-/*
-// ── ORIGINAL TAB NAVIGATOR (restore when done) ──────────────────────────────
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import HomeScreen from '../screens/HomeScreen';
-import CalendarScreen from '../screens/CalendarScreen';
-import BadgeScreen from '../screens/BadgeScreen';
-
-const Tab = createBottomTabNavigator();
-
-export default function AppNavigator() {
-  return (
-    <Tab.Navigator initialRouteName="Badges" screenOptions={{ headerShown: false }}>
-      <Tab.Screen name="Badges" component={BadgeScreen} />
-      <Tab.Screen name="Home" component={HomeScreen} />
-      <Tab.Screen name="Calendar" component={CalendarScreen} />
-      <Tab.Screen name="Settings" component={SettingsScreen} />
-    </Tab.Navigator>
-  );
-}
-*/

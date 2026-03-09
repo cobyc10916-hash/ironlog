@@ -174,7 +174,7 @@ export default function BadgeScreen({ navigation }) {
 
       <TouchableOpacity
         style={styles.backBtn}
-        onPress={() => navigation?.navigate('Home')}
+        onPress={() => navigation?.goBack()}
         activeOpacity={0.6}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >

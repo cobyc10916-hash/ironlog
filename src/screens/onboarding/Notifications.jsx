@@ -57,7 +57,7 @@ const WheelPicker = memo(function WheelPicker({ items, initialIndex = 0, onChang
 
   return (
     <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
-      <View pointerEvents="none" style={[styles.selectionBand, { top: ITEM_HEIGHT }]} />
+      <View style={[styles.selectionBand, { top: ITEM_HEIGHT }, { pointerEvents: 'none' }]} />
       <ScrollView
         ref={ref}
         showsVerticalScrollIndicator={false}
