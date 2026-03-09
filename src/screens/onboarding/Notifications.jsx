@@ -138,7 +138,7 @@ export default function Notifications({ navigation, route }) {
     setMorningTime(draftMorning);
     setDangerFrom(draftDangerFrom);
     setDangerTo(draftDangerTo);
-    navigation?.navigate('Settings');
+    navigation?.goBack();
   };
 
   const handleContinue = () => {
@@ -189,7 +189,7 @@ export default function Notifications({ navigation, route }) {
       {isEditing && (
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={() => navigation?.navigate('Settings')}
+          onPress={() => navigation?.goBack()}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >

@@ -188,7 +188,6 @@ const DeleteConfirmModal = ({ visible, onYes, onNo }) => {
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function SettingsScreen({
-  onBack,
   onSignOut,
   onDeleteAccount,
   onRestorePurchases,
@@ -226,7 +225,7 @@ export default function SettingsScreen({
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backBtn}
-          onPress={onBack ?? (() => navigation?.goBack())}
+          onPress={() => navigation?.goBack()}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
