@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback, memo } from 'react';
 import {
   View,
   Text,
@@ -10,17 +10,18 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
+import { useSettings } from '../../context/SettingsContext';
 
 const ITEM_HEIGHT = 44;
 const PICKER_HEIGHT = ITEM_HEIGHT * 3;
 
-const HOURS = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'];
-const MINUTES = ['00', '05', '10', '15', '20', '25', '30', '35', '40', '45', '50', '55'];
-const PERIODS = ['AM', 'PM'];
+const HOURS   = ['01','02','03','04','05','06','07','08','09','10','11','12'];
+const MINUTES = ['00','05','10','15','20','25','30','35','40','45','50','55'];
+const PERIODS = ['AM','PM'];
 
 const LABEL1 = 'YOUR MORNING\nNOTIFICATION WILL LOOK LIKE THIS.';
 const LABEL2 = 'YOUR DANGER PERIOD NOTIFICATION WILL LOOK LIKE THIS.';
-const CHAR_DELAY = 60; // ms per character
+const CHAR_DELAY = 60;
 
 function typewriteText(fullText, setter, onComplete) {
   setter('');
@@ -35,7 +36,8 @@ function typewriteText(fullText, setter, onComplete) {
   }, CHAR_DELAY);
 }
 
-function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
+// memo: only re-renders when its own scroll ends, not on parent state changes
+const WheelPicker = memo(function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const ref = useRef(null);
 
@@ -55,11 +57,7 @@ function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
 
   return (
     <View style={{ width, height: PICKER_HEIGHT, overflow: 'hidden' }}>
-      {/* selection band */}
-      <View
-        pointerEvents="none"
-        style={[styles.selectionBand, { top: ITEM_HEIGHT }]}
-      />
+      <View pointerEvents="none" style={[styles.selectionBand, { top: ITEM_HEIGHT }]} />
       <ScrollView
         ref={ref}
         showsVerticalScrollIndicator={false}
@@ -70,12 +68,7 @@ function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
       >
         {items.map((item, i) => (
           <View key={i} style={styles.wheelItem}>
-            <Text
-              style={[
-                styles.wheelText,
-                { opacity: i === activeIndex ? 1 : 0.22 },
-              ]}
-            >
+            <Text style={[styles.wheelText, { opacity: i === activeIndex ? 1 : 0.22 }]}>
               {item}
             </Text>
           </View>
@@ -83,36 +76,82 @@ function WheelPicker({ items, initialIndex = 0, onChange, width = 48 }) {
       </ScrollView>
     </View>
   );
-}
+});
 
-function TimePicker({ initialHour = 5, initialMinute = 0, initialPeriod = 0 }) {
+// memo + useRef: no stale closures, no cascade re-renders
+const TimePicker = memo(function TimePicker({ initialValues, onTimeChange }) {
+  // Refs track live values so onChange callbacks never read stale closure data
+  const hourRef   = useRef(initialValues.hourIdx);
+  const minuteRef = useRef(initialValues.minuteIdx);
+  const periodRef = useRef(initialValues.periodIdx);
+
+  const onHour = useCallback((i) => {
+    hourRef.current = i;
+    onTimeChange?.({ hourIdx: i, minuteIdx: minuteRef.current, periodIdx: periodRef.current });
+  }, [onTimeChange]);
+
+  const onMinute = useCallback((i) => {
+    minuteRef.current = i;
+    onTimeChange?.({ hourIdx: hourRef.current, minuteIdx: i, periodIdx: periodRef.current });
+  }, [onTimeChange]);
+
+  const onPeriod = useCallback((i) => {
+    periodRef.current = i;
+    onTimeChange?.({ hourIdx: hourRef.current, minuteIdx: minuteRef.current, periodIdx: i });
+  }, [onTimeChange]);
+
   return (
     <View style={styles.timePicker}>
-      <WheelPicker items={HOURS} initialIndex={initialHour} width={48} />
-      <WheelPicker items={MINUTES} initialIndex={initialMinute} width={48} />
-      <WheelPicker items={PERIODS} initialIndex={initialPeriod} width={40} />
+      <WheelPicker items={HOURS}   initialIndex={initialValues.hourIdx}   width={48} onChange={onHour}   />
+      <WheelPicker items={MINUTES} initialIndex={initialValues.minuteIdx} width={48} onChange={onMinute} />
+      <WheelPicker items={PERIODS} initialIndex={initialValues.periodIdx} width={40} onChange={onPeriod} />
     </View>
   );
-}
+});
 
-export default function Notifications({ navigation }) {
+export default function Notifications({ navigation, route }) {
+  const isEditing = route?.params?.isEditing === true;
+  const { morningTime, setMorningTime, dangerFrom, setDangerFrom, dangerTo, setDangerTo } = useSettings();
+
+  // Local draft state — committed to context on save
+  const [draftMorning,    setDraftMorning]    = useState(morningTime);
+  const [draftDangerFrom, setDraftDangerFrom] = useState(dangerFrom);
+  const [draftDangerTo,   setDraftDangerTo]   = useState(dangerTo);
+
+  // Stable refs — useCallback keeps handler identity stable across renders
+  // so memo'd TimePicker children never re-render due to prop identity change
+  const onMorningChange    = useCallback((v) => setDraftMorning(v),    []);
+  const onDangerFromChange = useCallback((v) => setDraftDangerFrom(v), []);
+  const onDangerToChange   = useCallback((v) => setDraftDangerTo(v),   []);
+
   const insets = useSafeAreaInsets();
-  const overlayOpacity = useRef(new Animated.Value(0)).current;
-  const notif1Slide  = useRef(new Animated.Value(-200)).current;
-  const notif2Slide  = useRef(new Animated.Value(-200)).current;
-  const label1Opacity = useRef(new Animated.Value(0)).current;
-  const label2Opacity = useRef(new Animated.Value(0)).current;
-  const [overlayShown, setOverlayShown] = useState(false);
-  const [label1Text, setLabel1Text] = useState('');
-  const [label2Text, setLabel2Text] = useState('');
+  const overlayOpacity  = useRef(new Animated.Value(0)).current;
+  const notif1Slide     = useRef(new Animated.Value(-200)).current;
+  const notif2Slide     = useRef(new Animated.Value(-200)).current;
+  const label1Opacity   = useRef(new Animated.Value(0)).current;
+  const label2Opacity   = useRef(new Animated.Value(0)).current;
+  const [overlayShown,  setOverlayShown]  = useState(false);
+  const [label1Text,    setLabel1Text]    = useState('');
+  const [label2Text,    setLabel2Text]    = useState('');
+
+  const saveAndGoBack = () => {
+    setMorningTime(draftMorning);
+    setDangerFrom(draftDangerFrom);
+    setDangerTo(draftDangerTo);
+    navigation?.navigate('Settings');
+  };
 
   const handleContinue = () => {
+    // In editing mode: save and return immediately
+    if (isEditing) {
+      saveAndGoBack();
+      return;
+    }
+
     if (overlayShown) return;
     setOverlayShown(true);
 
-    // Fade to black
     Animated.timing(overlayOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
-      // Typewrite label 1, then slide in notification 1
       label1Opacity.setValue(1);
       typewriteText(LABEL1, setLabel1Text, () => {
         Animated.timing(notif1Slide, { toValue: 0, duration: 380, useNativeDriver: true }).start(() => {
@@ -120,7 +159,6 @@ export default function Notifications({ navigation }) {
             Animated.timing(notif1Slide, { toValue: -200, duration: 380, useNativeDriver: true }).start(() => {
               Animated.timing(label1Opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
                 setLabel1Text('');
-                // Typewrite label 2, then slide in notification 2
                 label2Opacity.setValue(1);
                 typewriteText(LABEL2, setLabel2Text, () => {
                   Animated.timing(notif2Slide, { toValue: 0, duration: 380, useNativeDriver: true }).start(() => {
@@ -147,6 +185,20 @@ export default function Notifications({ navigation }) {
 
   return (
     <SafeAreaView style={styles.root}>
+
+      {isEditing && (
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation?.navigate('Settings')}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.backArrow}>←</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.spacer} />
+
       {/* Content */}
       <View style={styles.content}>
         {/* Section 1 — Morning notification */}
@@ -154,7 +206,10 @@ export default function Notifications({ navigation }) {
           <Text style={styles.sectionLabel}>
             WHEN DO YOU WANT YOUR{'\n'}MORNING NOTIFICATION?
           </Text>
-          <TimePicker initialHour={5} initialMinute={6} initialPeriod={0} />
+          <TimePicker
+            initialValues={draftMorning}
+            onTimeChange={onMorningChange}
+          />
         </View>
 
         <View style={styles.divider} />
@@ -167,15 +222,23 @@ export default function Notifications({ navigation }) {
           <View style={styles.dangerRow}>
             <View style={styles.dangerGroup}>
               <Text style={styles.dangerLabel}>FROM</Text>
-              <TimePicker initialHour={2} initialMinute={0} initialPeriod={1} />
+              <TimePicker
+                initialValues={draftDangerFrom}
+                onTimeChange={onDangerFromChange}
+              />
             </View>
             <View style={styles.dangerGroup}>
               <Text style={styles.dangerLabel}>TO</Text>
-              <TimePicker initialHour={9} initialMinute={0} initialPeriod={1} />
+              <TimePicker
+                initialValues={draftDangerTo}
+                onTimeChange={onDangerToChange}
+              />
             </View>
           </View>
         </View>
       </View>
+
+      <View style={styles.spacer} />
 
       {/* Bottom */}
       <View style={styles.bottom}>
@@ -184,17 +247,15 @@ export default function Notifications({ navigation }) {
           onPress={handleContinue}
           activeOpacity={0.8}
         >
-          <Text style={styles.continueText}>CONTINUE</Text>
+          <Text style={styles.continueText}>{isEditing ? 'DONE' : 'CONTINUE'}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Post-demo overlay */}
+      {/* Post-demo overlay (onboarding only) */}
       {overlayShown && (
         <>
-          {/* Full-screen dark overlay */}
           <Animated.View style={[styles.darkOverlay, { opacity: overlayOpacity }]} />
 
-          {/* Notification 1 */}
           <Animated.View
             style={[styles.notifBanner, { top: insets.top + 12, transform: [{ translateY: notif1Slide }] }]}
           >
@@ -207,13 +268,11 @@ export default function Notifications({ navigation }) {
             </View>
           </Animated.View>
 
-          {/* Label 1 */}
           <Animated.View style={[styles.labelContainer, { opacity: label1Opacity }]}>
             <Text style={[styles.labelText, { opacity: 0 }]}>{LABEL1}</Text>
             <Text style={[styles.labelText, { position: 'absolute', top: 0, left: 0, right: 0 }]}>{label1Text}</Text>
           </Animated.View>
 
-          {/* Notification 2 */}
           <Animated.View
             style={[styles.notifBanner, { top: insets.top + 12, transform: [{ translateY: notif2Slide }] }]}
           >
@@ -226,7 +285,6 @@ export default function Notifications({ navigation }) {
             </View>
           </Animated.View>
 
-          {/* Label 2 */}
           <Animated.View style={[styles.labelContainer, { opacity: label2Opacity }]}>
             <Text style={[styles.labelText, { opacity: 0 }]}>{LABEL2}</Text>
             <Text style={[styles.labelText, { position: 'absolute', top: 0, left: 0, right: 0 }]}>{label2Text}</Text>
@@ -242,10 +300,23 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background,
     paddingHorizontal: 24,
-    justifyContent: 'center',
   },
-
-  /* ── layout ── */
+  // Fixed-height spacer pushes content to vertical center without triggering
+  // layout remeasurement on every state change (avoids justifyContent: 'center' thrash)
+  spacer: {
+    flex: 1,
+  },
+  backBtn: {
+    position: 'absolute',
+    top: 56,
+    left: 24,
+    zIndex: 10,
+  },
+  backArrow: {
+    fontFamily: fonts.display,
+    fontSize: 20,
+    color: colors.white,
+  },
   content: {
     gap: 40,
   },
@@ -267,8 +338,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.white,
     opacity: 0.18,
   },
-
-  /* ── wheel picker ── */
   selectionBand: {
     position: 'absolute',
     height: ITEM_HEIGHT,
@@ -295,8 +364,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 4,
   },
-
-  /* ── danger period ── */
   dangerRow: {
     flexDirection: 'row',
     gap: 20,
@@ -313,8 +380,6 @@ const styles = StyleSheet.create({
     letterSpacing: 3,
     opacity: 0.45,
   },
-
-  /* ── bottom ── */
   bottom: {
     position: 'absolute',
     bottom: 24,
@@ -337,13 +402,9 @@ const styles = StyleSheet.create({
     color: colors.white,
     letterSpacing: 8,
   },
-  /* ── post-demo overlay ── */
   darkOverlay: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: 'rgba(0,0,0,0.85)',
     zIndex: 50,
   },
@@ -363,8 +424,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 28,
   },
-
-  /* ── mock notification ── */
   notifBanner: {
     position: 'absolute',
     top: 12,

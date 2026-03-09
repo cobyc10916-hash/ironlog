@@ -1,19 +1,38 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
+import { useSettings } from '../../context/SettingsContext';
 
-export default function Intensity({ navigation }) {
-  const [selected, setSelected] = useState(null);
+export default function Intensity({ navigation, route }) {
+  const isEditing = route?.params?.isEditing === true;
+  const { intensity: savedIntensity, setIntensity } = useSettings();
 
-  const handleSelect = (intensity) => {
-    setSelected(intensity);
-    navigation?.navigate('Notifications', { intensity });
+  const [selected, setSelected] = useState(savedIntensity);
+
+  const handleSelect = (option) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setSelected(option);
+    setIntensity(option);
+    // Stay on screen — user must press ← to commit and return
   };
 
   return (
     <SafeAreaView style={styles.root}>
+
+      {isEditing && (
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => navigation?.navigate('Settings')}
+          activeOpacity={0.6}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.backArrow}>←</Text>
+        </TouchableOpacity>
+      )}
+
       <View style={styles.group}>
         <Text style={styles.heading}>CHOOSE YOUR{'\n'}INTENSITY</Text>
 
@@ -35,6 +54,7 @@ export default function Intensity({ navigation }) {
           })}
         </View>
       </View>
+
     </SafeAreaView>
   );
 }
@@ -46,6 +66,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
+  },
+  backBtn: {
+    position: 'absolute',
+    top: 56,
+    left: 24,
+    zIndex: 10,
+  },
+  backArrow: {
+    fontFamily: fonts.display,
+    fontSize: 20,
+    color: colors.white,
   },
   group: {
     alignItems: 'center',
@@ -64,25 +95,26 @@ const styles = StyleSheet.create({
     width: '100%',
     gap: 16,
   },
+  // Default: hollow (dark bg, white border, white text)
   button: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.background,
     borderRadius: 8,
     borderWidth: 2,
     borderColor: colors.white,
     paddingVertical: 18,
     alignItems: 'center',
   },
+  // Selected: solid white fill, dark text
   buttonSelected: {
-    backgroundColor: colors.background,
-    borderColor: colors.white,
+    backgroundColor: colors.white,
   },
   buttonText: {
     fontFamily: fonts.display,
     fontSize: 24,
-    color: colors.background,
+    color: colors.white,
     letterSpacing: 6,
   },
   buttonTextSelected: {
-    color: colors.white,
+    color: colors.background,
   },
 });

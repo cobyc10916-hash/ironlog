@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -129,7 +130,7 @@ const HEX_INNER = [
 ].join(' ');
 
 // ─── BadgeInsignia ──────────────────────────────────────────────────────────────
-const BadgeInsignia = ({ number, unit, isEarned }) => (
+const BadgeInsignia = memo(function BadgeInsignia({ number, unit, isEarned }) { return (
   <View style={[styles.badge, !isEarned && styles.badgeUnearned]}>
     <Svg
       width={BADGE_W}
@@ -164,7 +165,7 @@ const BadgeInsignia = ({ number, unit, isEarned }) => (
       </Text>
     </View>
   </View>
-);
+); });
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function BadgeScreen({ navigation }) {
