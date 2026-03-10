@@ -1,24 +1,25 @@
-import { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Notifications from 'expo-notifications';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 
 export default function NotificationPermission({ navigation }) {
-  const [denied, setDenied] = useState(false);
-
-  const handleEnable = async () => {
-    const { status } = await Notifications.requestPermissionsAsync();
-    if (status === 'granted') {
-      navigation?.navigate('Notifications');
-    } else {
-      setDenied(true);
-    }
+  const handleEnable = () => {
+    navigation?.navigate('Notifications');
   };
 
   return (
     <SafeAreaView style={styles.root}>
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => navigation?.goBack()}
+        activeOpacity={0.6}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Ionicons name="chevron-back" size={26} color={colors.white} />
+      </TouchableOpacity>
+
       <View style={styles.content}>
         <Text style={styles.headline}>
           NOTIFICATIONS{'\n'}ARE THE CORE{'\n'}OF THIS APP.
@@ -34,11 +35,6 @@ export default function NotificationPermission({ navigation }) {
           <Text style={styles.buttonText}>ENABLE</Text>
         </TouchableOpacity>
 
-        {denied && (
-          <TouchableOpacity onPress={() => Linking.openSettings()} activeOpacity={0.7}>
-            <Text style={styles.settingsHint}>OPEN SETTINGS TO ENABLE NOTIFICATIONS</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -51,6 +47,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingBottom: 80,
   },
   content: {
     alignItems: 'center',
@@ -65,7 +62,7 @@ const styles = StyleSheet.create({
   },
   bottom: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 60,
     left: 24,
     right: 24,
     alignItems: 'center',
@@ -80,18 +77,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     width: '100%',
   },
+  backBtn: {
+    position: 'absolute',
+    top: 56,
+    left: 20,
+    zIndex: 10,
+  },
   buttonText: {
     fontFamily: fonts.display,
     fontSize: 22,
     color: colors.white,
     letterSpacing: 8,
-  },
-  settingsHint: {
-    fontFamily: fonts.display,
-    fontSize: 9,
-    color: colors.white,
-    opacity: 0.4,
-    letterSpacing: 2,
-    textAlign: 'center',
   },
 });

@@ -17,7 +17,9 @@ export default function Intensity({ navigation, route }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setSelected(option);
     setIntensity(option);
-    // Stay on screen — user must press ← to commit and return
+    if (!isEditing) {
+      navigation?.navigate('NotificationPermission');
+    }
   };
 
   return (

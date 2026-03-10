@@ -169,7 +169,7 @@ export default function Notifications({ navigation, route }) {
                           setLabel2Text('');
                           Animated.timing(overlayOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
                             setOverlayShown(false);
-                            navigation?.navigate('Dashboard');
+                            navigation?.navigate('Demo');
                           });
                         });
                       });
@@ -187,16 +187,14 @@ export default function Notifications({ navigation, route }) {
   return (
     <SafeAreaView style={styles.root}>
 
-      {isEditing && (
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation?.goBack()}
-          activeOpacity={0.6}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={26} color={colors.white} />
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => navigation?.goBack()}
+        activeOpacity={0.6}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Ionicons name="chevron-back" size={26} color={colors.white} />
+      </TouchableOpacity>
 
       <View style={styles.spacer} />
 
@@ -383,7 +381,7 @@ const styles = StyleSheet.create({
   },
   bottom: {
     position: 'absolute',
-    bottom: 24,
+    bottom: 60,
     left: 24,
     right: 24,
     alignItems: 'center',

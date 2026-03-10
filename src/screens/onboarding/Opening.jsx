@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
   /* ── sign in ── */
   signInHitArea: {
     position: 'absolute',
-    bottom: 20,
+    bottom: 48,
     paddingVertical: 8,
     paddingHorizontal: 24,
   },

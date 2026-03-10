@@ -7,9 +7,9 @@ export function SettingsProvider({ children }) {
   const [intensity, setIntensity] = useState(null);
 
   // time state: indices into HOURS / MINUTES / PERIODS arrays from Notifications.jsx
-  const [morningTime, setMorningTime] = useState({ hourIdx: 5, minuteIdx: 6, periodIdx: 0 });
-  const [dangerFrom,  setDangerFrom]  = useState({ hourIdx: 2, minuteIdx: 0, periodIdx: 1 });
-  const [dangerTo,    setDangerTo]    = useState({ hourIdx: 9, minuteIdx: 0, periodIdx: 1 });
+  const [morningTime, setMorningTime] = useState({ hourIdx: 7, minuteIdx: 0, periodIdx: 0 }); // 8:00 AM
+  const [dangerFrom,  setDangerFrom]  = useState({ hourIdx: 8, minuteIdx: 0, periodIdx: 1 }); // 9:00 PM
+  const [dangerTo,    setDangerTo]    = useState({ hourIdx: 10, minuteIdx: 0, periodIdx: 1 }); // 11:00 PM
 
   // isReady: false until the first effect tick completes.
   // Keeps App.js on the black void screen until all initial state is settled.

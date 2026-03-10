@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -34,7 +34,7 @@ const LOGGED_TEXT = 'LOGGED.';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-function getRingMetrics(bw, bh) {
+export function getRingMetrics(bw, bh) {
   const pw = bw + 2 * GAP + STROKE;
   const ph = bh + 2 * GAP + STROKE;
   const prx = BUTTON_RADIUS + GAP + STROKE / 2;
@@ -61,14 +61,36 @@ function getRingMetrics(bw, bh) {
   return { svgW, svgH, d, perimeter };
 }
 
-export default function HomeScreen({ navigation }) {
+export default function HomeScreen({
+  navigation,
+  initialStreak = 132,
+  demoMode = false,
+  demoStreak,
+  onLayoutMeasured,
+  onDemoResetComplete,
+  onDemoHoldComplete,
+}) {
   const { longestStreak } = useStreak();
-  const [streak, setStreak] = useState(132);
+  const [streak, setStreak] = useState(initialStreak);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
   const [daysCleanWidth, setDaysCleanWidth] = useState(0);
   const [loggedVisibleChars, setLoggedVisibleChars] = useState(0);
+
+  // Refs for layout measurement — used by Demo to position spotlight cutouts
+  const badgeRef = useRef(null);
+  const settingsRef = useRef(null);
+  const streakRef = useRef(null);
+  const resetRef = useRef(null);
+  const daysCleanRef = useRef(null);
+
+  // Sync demoStreak prop into local streak state when in demo mode
+  useEffect(() => {
+    if (demoMode && demoStreak !== undefined && demoStreak !== null) {
+      setStreak(demoStreak);
+    }
+  }, [demoMode, demoStreak]);
 
   const progress = useRef(new Animated.Value(0)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
@@ -147,12 +169,17 @@ export default function HomeScreen({ navigation }) {
     Animated.timing(buttonScale, { toValue: 1.0, duration: 150, useNativeDriver: true }).start();
   };
 
-  // Called when 3s hold completes — shows confirmation overlay
+  // Called when 3s hold completes — in demo mode skips confirm and goes straight to reset
   const handleHoldComplete = () => {
     stopPulse();
     isComplete.current = true;
     clearHapticTimers();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (demoMode) {
+      onDemoHoldComplete?.();
+      performReset(true);
+      return;
+    }
     overlayOpacity.setValue(0);
     setShowConfirm(true);
     Animated.timing(overlayOpacity, { toValue: 1, duration: 300, useNativeDriver: true }).start();
@@ -179,7 +206,9 @@ export default function HomeScreen({ navigation }) {
                 clearTypewriter();
                 isAnimating.current = false;
                 isComplete.current = false;
-                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+                  if (demoMode) onDemoResetComplete?.();
+                });
               });
             }, 1500);
           });
@@ -267,18 +296,26 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.root}>
       <View style={styles.topBar}>
         <TouchableOpacity
+          ref={badgeRef}
           onPress={() => navigation.navigate('Badge')}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          onLayout={() => badgeRef.current?.measure((_x, _y, w, h, px, py) => {
+            onLayoutMeasured?.('badgeIcon', { x: px, y: py, width: w, height: h });
+          })}
         >
           <Svg width={27} height={30} viewBox="4 7 92 106">
             <Path d={HEX_OUTER} fill="rgba(255,255,255,0.20)" stroke={colors.white} strokeWidth="5.5" strokeLinejoin="round" strokeLinecap="round" />
           </Svg>
         </TouchableOpacity>
         <TouchableOpacity
+          ref={settingsRef}
           onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          onLayout={() => settingsRef.current?.measure((_x, _y, w, h, px, py) => {
+            onLayoutMeasured?.('settingsIcon', { x: px, y: py, width: w, height: h });
+          })}
         >
           <View style={{ width: 30, height: 30 }}>
             <Ionicons name="settings" size={30} color={colors.white} style={{ opacity: 0.20, position: 'absolute' }} />
@@ -292,13 +329,26 @@ export default function HomeScreen({ navigation }) {
       </View>
 
       <View style={styles.center}>
-        <Text style={styles.daysClean} onLayout={(e) => setDaysCleanWidth(e.nativeEvent.layout.width)}>DAYS CLEAN</Text>
+        <Text
+          ref={daysCleanRef}
+          style={styles.daysClean}
+          onLayout={(e) => {
+            setDaysCleanWidth(e.nativeEvent.layout.width);
+            daysCleanRef.current?.measure((_x, _y, w, h, px, py) => {
+              onLayoutMeasured?.('daysClean', { x: px, y: py, width: w, height: h });
+            });
+          }}
+        >DAYS CLEAN</Text>
         <View style={[styles.miniDivider, { width: (60 + daysCleanWidth) / 2 }]} />
 
         <TouchableOpacity
+          ref={streakRef}
           style={styles.numberContainer}
           onPress={() => navigation.navigate('Calendar')}
           activeOpacity={0.8}
+          onLayout={() => streakRef.current?.measure((_x, _y, w, h, px, py) => {
+            onLayoutMeasured?.('streakNumber', { x: px, y: py, width: w, height: h });
+          })}
         >
           <Animated.Text
             style={[
@@ -349,16 +399,20 @@ export default function HomeScreen({ navigation }) {
           )}
 
           <TouchableOpacity
+            ref={resetRef}
             style={styles.resetButton}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             activeOpacity={1}
-            onLayout={(e) =>
+            onLayout={(e) => {
               setButtonLayout({
                 width: e.nativeEvent.layout.width,
                 height: e.nativeEvent.layout.height,
-              })
-            }
+              });
+              resetRef.current?.measure((_x, _y, w, h, px, py) => {
+                onLayoutMeasured?.('resetButton', { x: px, y: py, width: w, height: h });
+              });
+            }}
           >
             <Animated.View
               style={[StyleSheet.absoluteFillObject, styles.flashOverlay, { opacity: flashOpacity }]}
@@ -370,10 +424,12 @@ export default function HomeScreen({ navigation }) {
 
       <View style={styles.bottomSpacer} />
 
-      <View style={styles.bottom}>
-        <View style={styles.divider} />
-        <Text style={styles.longestStreak}>LONGEST STREAK: {longestStreak} DAYS</Text>
-      </View>
+      {!demoMode && (
+        <View style={styles.bottom}>
+          <View style={styles.divider} />
+          <Text style={styles.longestStreak}>LONGEST STREAK: {longestStreak} DAYS</Text>
+        </View>
+      )}
 
       {/* Confirmation overlay — Modal covers full screen including safe areas */}
       <Modal

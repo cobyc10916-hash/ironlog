@@ -3,7 +3,7 @@ import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
-import AppNavigator from './src/navigation/AppNavigator';
+import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 
 const BLACK = { flex: 1, backgroundColor: '#0a0a0a' };
 
@@ -16,7 +16,7 @@ function AppContent({ fontsLoaded }) {
 
   return (
     <NavigationContainer>
-      <AppNavigator />
+      <OnboardingNavigator />
     </NavigationContainer>
   );
 }
