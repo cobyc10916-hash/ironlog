@@ -249,6 +249,7 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     letterSpacing: 6,
     marginBottom: 14,
+    paddingLeft: 12,
   },
   divider: {
     width: SCREEN_WIDTH - H_PADDING * 2,

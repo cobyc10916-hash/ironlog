@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
@@ -29,7 +30,7 @@ export default function Intensity({ navigation, route }) {
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Text style={styles.backArrow}>←</Text>
+          <Ionicons name="chevron-back" size={26} color={colors.white} />
         </TouchableOpacity>
       )}
 
@@ -70,7 +71,7 @@ const styles = StyleSheet.create({
   backBtn: {
     position: 'absolute',
     top: 56,
-    left: 24,
+    left: 20,
     zIndex: 10,
   },
   backArrow: {

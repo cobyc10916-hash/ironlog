@@ -7,14 +7,19 @@ import {
   ScrollView,
   Animated,
   Easing,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const H_PADDING = 20;
+
 const ITEM_H        = 56;
 const VISIBLE       = 5;
 const PAD           = 2;
@@ -404,17 +409,20 @@ export default function LogHistoricalResetScreen({
   return (
     <SafeAreaView style={styles.root}>
 
-      {/* ── Header ── */}
+      {/* ── Back button — absolutely pinned ── */}
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={goBack}
+        activeOpacity={0.6}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Ionicons name="chevron-back" size={26} color={colors.white} />
+      </TouchableOpacity>
+
+      {/* ── Header block — label + glowing divider ── */}
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={goBack}
-          activeOpacity={0.6}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Text style={styles.backArrow}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>LOG PAST RELAPSE</Text>
+        <Text style={styles.headerLabel}>LOG PAST RELAPSE</Text>
+        <View style={styles.headerDivider} />
       </View>
 
       {/* ── Picker area — instruction sits directly above picker ── */}
@@ -555,27 +563,35 @@ const styles = StyleSheet.create({
   },
 
   // Header
-  header: {
-    height: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
   backBtn: {
     position: 'absolute',
-    left: 24,
+    top: 56,
+    left: 20,
+    zIndex: 10,
   },
-  backArrow: {
-    fontFamily: fonts.display,
-    fontSize: 20,
-    color: colors.white,
+  header: {
+    height: 68,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingBottom: 10,
   },
-  headerTitle: {
+  headerLabel: {
     fontFamily: fonts.display,
-    fontSize: 11,
+    fontSize: 12,
     color: colors.white,
+    opacity: 0.7,
     letterSpacing: 6,
+    marginBottom: 14,
+    paddingLeft: 12,
+  },
+  headerDivider: {
+    width: SCREEN_WIDTH - H_PADDING * 2,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+    shadowColor: '#ffffff',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.7,
+    shadowRadius: 10,
   },
 
   // Picker area — centers [instruction + picker] as a unit

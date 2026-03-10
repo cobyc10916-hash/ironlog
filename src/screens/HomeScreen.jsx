@@ -6,8 +6,25 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
+import { useStreak } from '../hooks/useStreak';
 
-const LONGEST_STREAK = 50;
+// Pointy-top hexagon path — same geometry as BadgeScreen (viewBox "4 7 92 106")
+const HEX_OUTER = [
+  'M 47.4 9.5',
+  'Q 50 8 52.6 9.5',
+  'L 92.4 32.5',
+  'Q 95 34 95 37',
+  'L 95 83',
+  'Q 95 86 92.4 87.5',
+  'L 52.6 110.5',
+  'Q 50 112 47.4 110.5',
+  'L 7.6 87.5',
+  'Q 5 86 5 83',
+  'L 5 37',
+  'Q 5 34 7.6 32.5',
+  'Z',
+].join(' ');
+
 const HOLD_DURATION = 3000;
 const GAP = 4;
 const STROKE = 4;
@@ -45,6 +62,7 @@ function getRingMetrics(bw, bh) {
 }
 
 export default function HomeScreen({ navigation }) {
+  const { longestStreak } = useStreak();
   const [streak, setStreak] = useState(132);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
@@ -253,14 +271,19 @@ export default function HomeScreen({ navigation }) {
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Ionicons name="shield-outline" size={22} color={colors.white} />
+          <Svg width={27} height={30} viewBox="4 7 92 106">
+            <Path d={HEX_OUTER} fill="rgba(255,255,255,0.20)" stroke={colors.white} strokeWidth="5.5" strokeLinejoin="round" strokeLinecap="round" />
+          </Svg>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => navigation.navigate('Settings')}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Ionicons name="settings-outline" size={22} color={colors.white} />
+          <View style={{ width: 30, height: 30 }}>
+            <Ionicons name="settings" size={30} color={colors.white} style={{ opacity: 0.20, position: 'absolute' }} />
+            <Ionicons name="settings-outline" size={30} color={colors.white} />
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -349,7 +372,7 @@ export default function HomeScreen({ navigation }) {
 
       <View style={styles.bottom}>
         <View style={styles.divider} />
-        <Text style={styles.longestStreak}>LONGEST STREAK: {LONGEST_STREAK} DAYS</Text>
+        <Text style={styles.longestStreak}>LONGEST STREAK: {longestStreak} DAYS</Text>
       </View>
 
       {/* Confirmation overlay — Modal covers full screen including safe areas */}

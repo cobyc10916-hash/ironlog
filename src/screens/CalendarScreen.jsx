@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CalendarGrid, { GRID_WIDTH } from '../components/CalendarGrid';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
@@ -86,7 +86,7 @@ export default function CalendarScreen({ navigation }) {
         activeOpacity={0.6}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
-        <MaterialCommunityIcons name="arrow-left" size={22} color={colors.white} />
+        <Ionicons name="chevron-back" size={26} color={colors.white} />
       </TouchableOpacity>
 
       {/* Header block — flows from top, paddingTop sets vertical position */}
@@ -112,6 +112,24 @@ export default function CalendarScreen({ navigation }) {
           relapseDays={RELAPSE_DAYS}
           todayString={todayString}
         />
+      </View>
+
+      {/* Legend */}
+      <View style={styles.legendRow}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendCell, styles.legendCellSolid]} />
+          <Text style={styles.legendLabel}>CLEAN</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendCell, styles.legendCellHollow]}>
+            <MaterialCommunityIcons name="skull" size={Math.round(LEGEND_SIZE * 0.52)} color={colors.white} />
+          </View>
+          <Text style={styles.legendLabel}>RELAPSE</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendCell, styles.legendCellHollow]} />
+          <Text style={styles.legendLabel}>NOT CHECKED IN</Text>
+        </View>
       </View>
 
       {/* Circular nav buttons — below grid */}
@@ -144,6 +162,8 @@ export default function CalendarScreen({ navigation }) {
     </SafeAreaView>
   );
 }
+
+const LEGEND_SIZE = 18;
 
 const styles = StyleSheet.create({
   // flex-start column — header and grid stack naturally, no centering gap
@@ -191,7 +211,7 @@ const styles = StyleSheet.create({
   // Nav row: absolutely pinned to bottom — never shifts with grid row count
   navRow: {
     position: 'absolute',
-    bottom: 100,
+    bottom: 140,
     width: '100%',
     paddingHorizontal: 30,
     flexDirection: 'row',
@@ -226,5 +246,47 @@ const styles = StyleSheet.create({
   // No flex:1, no justifyContent — grid sits immediately below divider
   gridContainer: {
     alignItems: 'center',
+  },
+
+  // Absolutely pinned — never shifts with grid row count
+  legendRow: {
+    position: 'absolute',
+    bottom: 50,
+    width: GRID_WIDTH,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    opacity: 0.4,
+  },
+
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+
+  legendCell: {
+    width: LEGEND_SIZE,
+    height: LEGEND_SIZE,
+    borderRadius: 2,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  legendCellSolid: {
+    backgroundColor: colors.white,
+  },
+
+  legendCellHollow: {
+    borderWidth: 1,
+    borderColor: colors.white,
+  },
+
+  legendLabel: {
+    fontFamily: fonts.display,
+    fontSize: 10,
+    color: colors.white,
+    letterSpacing: 0.5,
   },
 });
