@@ -69,6 +69,7 @@ export default function HomeScreen({
   onLayoutMeasured,
   onDemoResetComplete,
   onDemoHoldComplete,
+  resetDisabled = false,
 }) {
   const { longestStreak } = useStreak();
   const [streak, setStreak] = useState(initialStreak);
@@ -93,6 +94,7 @@ export default function HomeScreen({
   }, [demoMode, demoStreak]);
 
   const progress = useRef(new Animated.Value(0)).current;
+  const ringOpacity = useRef(new Animated.Value(0)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const numberOpacity = useRef(new Animated.Value(1)).current;
   const quoteOpacity = useRef(new Animated.Value(0)).current;
@@ -176,6 +178,7 @@ export default function HomeScreen({
     clearHapticTimers();
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     if (demoMode) {
+      Animated.timing(ringOpacity, { toValue: 0, duration: 600, useNativeDriver: true }).start();
       onDemoHoldComplete?.();
       performReset(true);
       return;
@@ -244,11 +247,15 @@ export default function HomeScreen({
     Animated.timing(overlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
       setShowConfirm(false);
       isComplete.current = false;
-      Animated.timing(progress, { toValue: 0, duration: 150, easing: Easing.linear, useNativeDriver: false }).start();
+      Animated.parallel([
+        Animated.timing(progress, { toValue: 0, duration: 300, easing: Easing.out(Easing.ease), useNativeDriver: false }),
+        Animated.timing(ringOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+      ]).start();
     });
   };
 
   const handlePressIn = () => {
+    if (resetDisabled) return;
     if (isAnimating.current || showConfirm) return;
 
     isComplete.current = false;
@@ -260,6 +267,7 @@ export default function HomeScreen({
 
     startPulse();
     progress.setValue(0);
+    Animated.timing(ringOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
     holdAnim.current = Animated.timing(progress, {
       toValue: 1,
       duration: HOLD_DURATION,
@@ -276,12 +284,10 @@ export default function HomeScreen({
     stopPulse();
     holdAnim.current?.stop();
     clearHapticTimers();
-    Animated.timing(progress, {
-      toValue: 0,
-      duration: 150,
-      easing: Easing.linear,
-      useNativeDriver: false,
-    }).start();
+    Animated.parallel([
+      Animated.timing(progress, { toValue: 0, duration: 300, easing: Easing.out(Easing.ease), useNativeDriver: false }),
+      Animated.timing(ringOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+    ]).start();
   };
 
   const { svgW, svgH, d, perimeter } = getRingMetrics(buttonLayout.width, buttonLayout.height);
@@ -381,26 +387,28 @@ export default function HomeScreen({
 
         <Animated.View style={[styles.resetWrapper, { transform: [{ scale: buttonScale }] }]}>
           {buttonLayout.width > 0 && (
-            <Svg
-              width={svgW}
-              height={svgH}
-              style={[styles.progressRingSvg, { top: -(GAP + STROKE), left: -(GAP + STROKE) }, { pointerEvents: 'none' }]}
-            >
-              <AnimatedPath
-                d={d}
-                stroke={colors.white}
-                strokeWidth={STROKE}
-                strokeDasharray={[perimeter]}
-                strokeDashoffset={dashOffset}
-                strokeLinecap="round"
-                fill="none"
-              />
-            </Svg>
+            <Animated.View style={{ opacity: ringOpacity }} pointerEvents="none">
+              <Svg
+                width={svgW}
+                height={svgH}
+                style={[styles.progressRingSvg, { top: -(GAP + STROKE), left: -(GAP + STROKE) }]}
+              >
+                <AnimatedPath
+                  d={d}
+                  stroke={colors.white}
+                  strokeWidth={STROKE}
+                  strokeDasharray={[perimeter]}
+                  strokeDashoffset={dashOffset}
+                  strokeLinecap="round"
+                  fill="none"
+                />
+              </Svg>
+            </Animated.View>
           )}
 
           <TouchableOpacity
             ref={resetRef}
-            style={styles.resetButton}
+            style={[styles.resetButton, { opacity: resetDisabled ? 0.4 : 1 }]}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}
             activeOpacity={1}
