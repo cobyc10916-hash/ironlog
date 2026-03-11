@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 import { useSettings } from '../../context/SettingsContext';
+import OnboardingProgress from '../../components/OnboardingProgress';
 
 const ITEM_HEIGHT = 44;
 const PICKER_HEIGHT = ITEM_HEIGHT * 3;
@@ -21,8 +23,26 @@ const MINUTES = ['00','05','10','15','20','25','30','35','40','45','50','55'];
 const PERIODS = ['AM','PM'];
 
 const LABEL1 = 'YOUR MORNING\nNOTIFICATION WILL LOOK LIKE THIS.';
-const LABEL2 = 'YOUR DANGER PERIOD NOTIFICATION WILL LOOK LIKE THIS.';
+const LABEL2 = 'YOUR DANGER PERIOD\nNOTIFICATION WILL LOOK LIKE THIS.';
 const CHAR_DELAY = 60;
+
+function toMinutes({ hourIdx, minuteIdx, periodIdx }) {
+  let hour = hourIdx + 1; // HOURS[0]='01' → 1, HOURS[11]='12' → 12
+  const minute = minuteIdx * 5;
+  const isAM = periodIdx === 0;
+  if (hour === 12 && isAM)  hour = 0;        // 12 AM = midnight
+  else if (hour !== 12 && !isAM) hour += 12; // 1–11 PM → 13–23
+  return hour * 60 + minute;
+}
+
+function isTimeInRange(time, from, to) {
+  const t = toMinutes(time);
+  const f = toMinutes(from);
+  const o = toMinutes(to);
+  if (f === o) return false;
+  if (f < o) return t >= f && t <= o;
+  return t >= f || t <= o; // wraps midnight
+}
 
 function typewriteText(fullText, setter, onComplete) {
   setter('');
@@ -135,6 +155,10 @@ export default function Notifications({ navigation, route }) {
   const [label1Text,    setLabel1Text]    = useState('');
   const [label2Text,    setLabel2Text]    = useState('');
 
+  const validOverlayOpacity = useRef(new Animated.Value(0)).current;
+  const validBtnsOpacity    = useRef(new Animated.Value(0)).current;
+  const [validationType, setValidationType] = useState(null); // null | 'invalid' | 'warning'
+
   const saveAndGoBack = () => {
     setMorningTime(draftMorning);
     setDangerFrom(draftDangerFrom);
@@ -142,16 +166,13 @@ export default function Notifications({ navigation, route }) {
     navigation?.goBack();
   };
 
-  const handleContinue = () => {
-    // In editing mode: save and return immediately
+  const proceedForward = () => {
     if (isEditing) {
       saveAndGoBack();
       return;
     }
-
     if (overlayShown) return;
     setOverlayShown(true);
-
     Animated.timing(overlayOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
       label1Opacity.setValue(1);
       typewriteText(LABEL1, setLabel1Text, () => {
@@ -184,12 +205,48 @@ export default function Notifications({ navigation, route }) {
     });
   };
 
+  const showValidation = (type) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setValidationType(type);
+    validOverlayOpacity.setValue(0);
+    validBtnsOpacity.setValue(0);
+    Animated.timing(validOverlayOpacity, { toValue: 1, duration: 250, useNativeDriver: true }).start(() => {
+      Animated.timing(validBtnsOpacity, { toValue: 1, duration: 150, useNativeDriver: true }).start();
+    });
+  };
+
+  const dismissValidation = (onDone) => {
+    Animated.timing(validOverlayOpacity, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      setValidationType(null);
+      onDone?.();
+    });
+  };
+
+  const handleContinue = () => {
+    const sameTime =
+      draftDangerFrom.hourIdx   === draftDangerTo.hourIdx &&
+      draftDangerFrom.minuteIdx === draftDangerTo.minuteIdx &&
+      draftDangerFrom.periodIdx === draftDangerTo.periodIdx;
+    if (sameTime) {
+      showValidation('invalid');
+      return;
+    }
+    if (isTimeInRange(draftMorning, draftDangerFrom, draftDangerTo)) {
+      showValidation('warning');
+      return;
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    proceedForward();
+  };
+
   return (
     <SafeAreaView style={styles.root}>
 
+      {!isEditing && <OnboardingProgress currentStep={3} />}
+
       <TouchableOpacity
         style={styles.backBtn}
-        onPress={() => navigation?.goBack()}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.goBack(); }}
         activeOpacity={0.6}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >
@@ -249,6 +306,53 @@ export default function Notifications({ navigation, route }) {
           <Text style={styles.continueText}>{isEditing ? 'DONE' : 'CONTINUE'}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Validation overlay */}
+      {validationType !== null && (
+        <Animated.View style={[styles.validOverlay, { opacity: validOverlayOpacity }]}>
+          <View style={styles.validContent}>
+            <Text style={styles.validTitle}>
+              {validationType === 'invalid' ? 'INVALID RANGE.' : 'HEADS UP.'}
+            </Text>
+            <Text style={styles.validSubtitle}>
+              {validationType === 'invalid'
+                ? 'START AND END OF YOUR DANGER PERIOD CANNOT BE THE SAME.'
+                : 'YOUR MORNING NOTIFICATION FALLS WITHIN YOUR DANGER PERIOD.'}
+            </Text>
+          </View>
+          <Animated.View style={{ opacity: validBtnsOpacity }}>
+            {validationType === 'warning' ? (
+              <View style={styles.validButtonRow}>
+                <TouchableOpacity
+                  style={[styles.validButton, styles.validButtonOutlined, { flex: 1 }]}
+                  onPress={() => dismissValidation()}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.validButtonText}>GO BACK</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.validButton, styles.validButtonFilled, { flex: 1 }]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    dismissValidation(proceedForward);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.validButtonText, { color: colors.background }]}>CONTINUE</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.validButton, styles.validButtonOutlined, { width: '100%' }]}
+                onPress={() => dismissValidation()}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.validButtonText}>GO BACK</Text>
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        </Animated.View>
+      )}
 
       {/* Post-demo overlay (onboarding only) */}
       {overlayShown && (
@@ -474,5 +578,58 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: 'rgba(255,255,255,0.72)',
     lineHeight: 18,
+  },
+  validOverlay: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.96)',
+    zIndex: 200,
+    paddingHorizontal: 24,
+    paddingBottom: 60,
+    justifyContent: 'space-between',
+  },
+  validContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 20,
+  },
+  validTitle: {
+    fontFamily: fonts.display,
+    fontSize: 32,
+    color: colors.white,
+    letterSpacing: 4,
+    textAlign: 'center',
+  },
+  validSubtitle: {
+    fontFamily: fonts.display,
+    fontSize: 13,
+    color: colors.white,
+    opacity: 0.6,
+    letterSpacing: 2,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  validButtonRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  validButton: {
+    paddingVertical: 18,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  validButtonOutlined: {
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  validButtonFilled: {
+    backgroundColor: colors.white,
+  },
+  validButtonText: {
+    fontFamily: fonts.display,
+    fontSize: 16,
+    color: colors.white,
+    letterSpacing: 4,
   },
 });

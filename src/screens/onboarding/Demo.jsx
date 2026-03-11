@@ -14,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import HomeScreen from '../HomeScreen';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
+import OnboardingProgress from '../../components/OnboardingProgress';
 
 // Extra padding around reset button so the SVG progress ring is fully visible
 const EXPOSE_PAD = 40;
@@ -117,9 +118,9 @@ function TapIndicator({ x, y, showDot = true }) {
   }, []);
 
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: x - 4, top: y - 4 }}>
-      {showDot && <View style={styles.tapDot} />}
-      <Animated.View style={[styles.tapRing, { transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
+    <View pointerEvents="none" style={{ position: 'absolute', left: x - 30, top: y - 30, width: 60, height: 60 }}>
+      {showDot && <View style={[styles.tapDot, { left: 26, top: 26 }]} />}
+      <Animated.View style={[styles.tapRing, { left: 26, top: 26, transform: [{ scale: ringScale }], opacity: ringOpacity }]} />
     </View>
   );
 }
@@ -604,6 +605,8 @@ export default function Demo({ navigation }) {
         </Animated.View>
       )}
 
+      <OnboardingProgress currentStep={4} />
+
       {/* SKIP — always topmost */}
       <TouchableOpacity
         style={[styles.skipButton, { bottom: insets.bottom + 24 }]}
@@ -688,7 +691,6 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
   },
   streakArrow: {
-    fontFamily: fonts.display,
     fontSize: 44,
     color: colors.white,
   },

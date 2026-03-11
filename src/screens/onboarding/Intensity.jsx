@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 import { useSettings } from '../../context/SettingsContext';
+import OnboardingProgress from '../../components/OnboardingProgress';
 
 export default function Intensity({ navigation, route }) {
   const isEditing = route?.params?.isEditing === true;
@@ -14,7 +15,7 @@ export default function Intensity({ navigation, route }) {
   const [selected, setSelected] = useState(savedIntensity);
 
   const handleSelect = (option) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelected(option);
     setIntensity(option);
     if (!isEditing) {
@@ -25,16 +26,16 @@ export default function Intensity({ navigation, route }) {
   return (
     <SafeAreaView style={styles.root}>
 
-      {isEditing && (
-        <TouchableOpacity
-          style={styles.backBtn}
-          onPress={() => navigation?.goBack()}
-          activeOpacity={0.6}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-        >
-          <Ionicons name="chevron-back" size={26} color={colors.white} />
-        </TouchableOpacity>
-      )}
+      {!isEditing && <OnboardingProgress currentStep={1} />}
+
+      <TouchableOpacity
+        style={styles.backBtn}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.goBack(); }}
+        activeOpacity={0.6}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Ionicons name="chevron-back" size={26} color={colors.white} />
+      </TouchableOpacity>
 
       <View style={styles.group}>
         <Text style={styles.heading}>CHOOSE YOUR{'\n'}INTENSITY</Text>

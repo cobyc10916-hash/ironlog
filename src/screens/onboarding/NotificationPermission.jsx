@@ -1,19 +1,23 @@
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
+import OnboardingProgress from '../../components/OnboardingProgress';
 
 export default function NotificationPermission({ navigation }) {
   const handleEnable = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation?.navigate('Notifications');
   };
 
   return (
     <SafeAreaView style={styles.root}>
+      <OnboardingProgress currentStep={2} />
       <TouchableOpacity
         style={styles.backBtn}
-        onPress={() => navigation?.goBack()}
+        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.goBack(); }}
         activeOpacity={0.6}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
       >

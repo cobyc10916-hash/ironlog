@@ -408,6 +408,7 @@ export default function HomeScreen({
 
           <TouchableOpacity
             ref={resetRef}
+            disabled={resetDisabled}
             style={[styles.resetButton, { opacity: resetDisabled ? 0.4 : 1 }]}
             onPressIn={handlePressIn}
             onPressOut={handlePressOut}

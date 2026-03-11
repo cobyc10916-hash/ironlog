@@ -9,8 +9,10 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
+import OnboardingProgress from '../../components/OnboardingProgress';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -20,7 +22,7 @@ const TIMELINE = [
   { day: 'DAY 7', desc: 'SUBSCRIPTION BEGINS. CANCEL ANYTIME.' },
 ];
 
-export default function Paywall() {
+export default function Paywall({ navigation }) {
   const [selectedPlan, setSelectedPlan] = useState('yearly');
 
   const line1Opacity = useRef(new Animated.Value(0)).current;
@@ -60,6 +62,8 @@ export default function Paywall() {
         </Animated.Text>
       </View>
 
+      <OnboardingProgress currentStep={5} />
+
       {/* Phase 2: paywall panel */}
       <Animated.View style={[styles.paywallPanel, { transform: [{ translateY: paywallY }] }]}>
         <SafeAreaView style={styles.paywallSafe}>
@@ -92,7 +96,7 @@ export default function Paywall() {
             <View style={styles.pricing}>
               <TouchableOpacity
                 style={[styles.priceRow, selectedPlan !== 'monthly' && styles.priceRowDimmed]}
-                onPress={() => setSelectedPlan('monthly')}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedPlan('monthly'); }}
                 activeOpacity={0.8}
               >
                 <View style={[styles.radio, selectedPlan === 'monthly' && styles.radioFilled]} />
@@ -102,7 +106,7 @@ export default function Paywall() {
 
               <TouchableOpacity
                 style={[styles.priceRow, selectedPlan !== 'yearly' && styles.priceRowDimmed]}
-                onPress={() => setSelectedPlan('yearly')}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setSelectedPlan('yearly'); }}
                 activeOpacity={0.8}
               >
                 <View style={[styles.radio, selectedPlan === 'yearly' && styles.radioFilled]} />
@@ -116,7 +120,7 @@ export default function Paywall() {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.ctaButton} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.ctaButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); navigation?.navigate('CreateAccount'); }} activeOpacity={0.8}>
               <Text style={styles.ctaText}>START YOUR 7 DAYS</Text>
             </TouchableOpacity>
             <Text style={styles.footer}>ALL PLANS INCLUDE A 7-DAY TRIAL</Text>

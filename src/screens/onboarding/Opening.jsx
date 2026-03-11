@@ -7,9 +7,9 @@ import {
   Animated,
   SafeAreaView,
 } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
-
 export default function Opening({ navigation }) {
   const pulse = useRef(new Animated.Value(1)).current;
 
@@ -43,7 +43,7 @@ export default function Opening({ navigation }) {
         <Animated.View style={[styles.beginWrapper, { transform: [{ scale: pulse }] }]}>
           <TouchableOpacity
             style={styles.beginButton}
-            onPress={() => navigation?.navigate('Intensity')}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.navigate('Intensity'); }}
             activeOpacity={0.8}
           >
             <Text style={styles.beginText}>BEGIN</Text>
