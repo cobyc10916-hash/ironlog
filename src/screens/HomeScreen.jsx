@@ -34,6 +34,44 @@ const LOGGED_TEXT = 'LOGGED.';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
+function OdometerDigit({ digit, digitHeight, fontSize, animate }) {
+  const translateY = useRef(new Animated.Value(-digitHeight * digit)).current;
+
+  useEffect(() => {
+    if (!animate) {
+      translateY.setValue(-digitHeight * digit);
+      return;
+    }
+    Animated.timing(translateY, {
+      toValue: -digitHeight * digit,
+      duration: 500,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: true,
+    }).start();
+  }, [digit, digitHeight, animate]);
+
+  return (
+    <View style={{ height: digitHeight, overflow: 'hidden', marginRight: -6 }}>
+      <Animated.View style={{ transform: [{ translateY }] }}>
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
+          <Text
+            key={d}
+            style={{
+              fontFamily: fonts.display,
+              fontSize,
+              color: colors.white,
+              height: digitHeight,
+              lineHeight: digitHeight,
+            }}
+          >
+            {d}
+          </Text>
+        ))}
+      </Animated.View>
+    </View>
+  );
+}
+
 export function getRingMetrics(bw, bh) {
   const pw = bw + 2 * GAP + STROKE;
   const ph = bh + 2 * GAP + STROKE;
@@ -73,6 +111,7 @@ export default function HomeScreen({
 }) {
   const { longestStreak } = useStreak();
   const [streak, setStreak] = useState(initialStreak);
+  const prevStreakRef = useRef(initialStreak);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -85,6 +124,12 @@ export default function HomeScreen({
   const streakRef = useRef(null);
   const resetRef = useRef(null);
   const daysCleanRef = useRef(null);
+
+  const shouldAnimate = !demoMode && streak === prevStreakRef.current + 1;
+
+  useEffect(() => {
+    prevStreakRef.current = streak;
+  }, [streak]);
 
   // Sync demoStreak prop into local streak state when in demo mode
   useEffect(() => {
@@ -356,17 +401,22 @@ export default function HomeScreen({
             onLayoutMeasured?.('streakNumber', { x: px, y: py, width: w, height: h });
           })}
         >
-          <Animated.Text
-            style={[
-              styles.streakNumber,
-              { opacity: numberOpacity },
-              streak.toString().length < 4 ? { lineHeight: 160 } : {},
-            ]}
-            adjustsFontSizeToFit={streak.toString().length >= 4}
-            numberOfLines={1}
-          >
-            {streak}
-          </Animated.Text>
+          <Animated.View style={[styles.odometerRow, { opacity: numberOpacity }]}>
+            {streak.toString().split('').map((d, i, arr) => {
+              const numDigits = arr.length;
+              const digitHeight = numDigits >= 4 ? Math.max(60, Math.floor(160 * 3 / numDigits)) : 160;
+              const posFromRight = numDigits - 1 - i;
+              return (
+                <OdometerDigit
+                  key={`digit-${posFromRight}`}
+                  digit={parseInt(d, 10)}
+                  digitHeight={digitHeight}
+                  fontSize={digitHeight}
+                  animate={shouldAnimate}
+                />
+              );
+            })}
+          </Animated.View>
           <Animated.View
             style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: quoteOpacity }]}
           >
@@ -514,11 +564,9 @@ const styles = StyleSheet.create({
     marginVertical: 48,
     paddingTop: 24,
   },
-  streakNumber: {
-    fontFamily: fonts.display,
-    fontSize: 160,
-    color: colors.white,
-    letterSpacing: -6,
+  odometerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   quoteContainer: {
     alignItems: 'center',

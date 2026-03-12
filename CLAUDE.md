@@ -241,8 +241,21 @@ $$;
 ## 6. Streak Calculation Rules (App-Side)
 
 When computing streak to display on HomeScreen:
-1. Fetch the most recent reset timestamp from `resets` table
-2. Fetch all `check_ins` with `date > reset_date AND date <= today`
-3. `streak = check_ins.length` — passive rule, no gap-breaking
-4. `longest_streak = MAX(streak, profiles.longest_streak)` — update profile if new high
-5. A new reset inserts a row in `resets` and does NOT delete check_ins (history is preserved)
+1. Fetch the most recent reset timestamp from the `resets` table for the current user
+2. `current_streak = number of full 24-hour periods elapsed since that reset timestamp`, calculated in the user's local timezone
+3. If no reset exists, `streak_start_date` from the `streaks` table is used as the origin point
+4. `longest_streak = MAX(current_streak, streaks.longest_streak)` — update `streaks` table if new high
+5. A new reset inserts a row in `resets` and updates `streak_start_date` in `streaks` — it does not delete any existing rows in `resets` (full history is preserved)
+6. All timestamps are stored in UTC and converted to local timezone for display and calculation only
+
+---
+
+## 7. Onboarding Restart Behavior
+
+If the app is fully closed (not backgrounded) at any point during onboarding before `onboarding_complete` is set to `true`, the user must always be routed back to the Opening screen on next launch. Do not attempt to save or restore mid-onboarding navigation state. Onboarding always runs in full from the beginning.
+
+---
+
+## 8. Notification Gating
+
+Push notifications (morning and danger period) must never fire unless the user has an active free trial or paid subscription confirmed by RevenueCat. Gate all notification scheduling behind an entitlement check — if no active entitlement exists, do not schedule any notifications regardless of what times the user selected during onboarding. Do not apply this rule to demo mode notifications, which have their own separate logic and should remain untouched.

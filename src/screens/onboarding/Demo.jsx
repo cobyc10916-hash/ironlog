@@ -35,7 +35,6 @@ const STEPS = [
   { duration: 4000, script: 'YOUR STREAK LINKS TO YOUR FULL CALENDAR HISTORY.', dwell: 5000 },
   { duration: 4000, script: 'EARN BADGES AS YOUR STREAK GROWS.', dwell: 5000 },
   { duration: 4000, script: 'ADJUST YOUR SETTINGS HERE.', dwell: 5000 },
-  { duration: 3000, script: null, final: true },
 ];
 
 // Type char-by-char but replace spaces at measured line-break positions with \n,
@@ -161,9 +160,8 @@ export default function Demo({ navigation }) {
   // useNativeDriver: true — lives on its own Animated.View with no layout animation.
   const fullAlpha = useRef(new Animated.Value(0)).current;
 
-  // Script + final text opacities
+  // Script opacity
   const scriptOpacity      = useRef(new Animated.Value(0)).current;
-  const finalTextOpacity   = useRef(new Animated.Value(0)).current;
   // Shown during the quote animation that plays after reset hold completes
   const quoteScriptOpacity = useRef(new Animated.Value(0)).current;
   // Arrow indicator opacity for the calendar explanation step
@@ -223,10 +221,7 @@ export default function Demo({ navigation }) {
       ? 200 + step.script.length * 60 + (step.dwell ?? DWELL_MS)
       : step.duration;
 
-    if (step.final) {
-      // Full-screen dim to 0.92 for final message
-      Animated.timing(fullAlpha, { toValue: 0.92, duration: 1200, useNativeDriver: true }).start();
-    } else if (idx === 0) {
+    if (idx === 0) {
       // No overlay at all — HomeScreen fully visible
       Animated.timing(fullAlpha,   { toValue: 0, duration: 600, useNativeDriver: true }).start();
       Animated.timing(spotOpacity, { toValue: 0, duration: 600, useNativeDriver: true }).start();
@@ -280,14 +275,6 @@ export default function Demo({ navigation }) {
           });
         }, 60);
       }, 200);
-    }
-
-    if (step.final) {
-      addTimeout(() => {
-        Animated.timing(finalTextOpacity, { toValue: 1, duration: 1200, useNativeDriver: true }).start();
-      }, 400);
-      addTimeout(() => navigation.navigate('Paywall'), effectiveDuration);
-      return;
     }
 
     if (step.userTriggered) return; // waits for onDemoResetComplete
@@ -357,6 +344,15 @@ export default function Demo({ navigation }) {
       return;
     }
 
+    if (idx === 5) {
+      addTimeout(() => {
+        Animated.timing(fullAlpha, { toValue: 1, duration: 700, useNativeDriver: true }).start(() => {
+          if (isMounted.current) navigation.navigate('Paywall');
+        });
+      }, effectiveDuration);
+      return;
+    }
+
     addTimeout(() => {
       isAnimating.current = false;
       startStep(idx + 1);
@@ -378,7 +374,7 @@ export default function Demo({ navigation }) {
       timers.current = [];
       clearInterval(typewriterInterval.current);
       clearInterval(quoteTypewriterInterval.current);
-      [spotOpacity, resetSpotOpacity, fullAlpha, scriptOpacity, finalTextOpacity, quoteScriptOpacity, arrowOpacity, badgeArrowOpacity, settingsArrowOpacity].forEach(v => v.stopAnimation());
+      [spotOpacity, resetSpotOpacity, fullAlpha, scriptOpacity, quoteScriptOpacity, arrowOpacity, badgeArrowOpacity, settingsArrowOpacity].forEach(v => v.stopAnimation());
     };
   }, []);
 
@@ -537,16 +533,6 @@ export default function Demo({ navigation }) {
         style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.82)', opacity: fullAlpha }]}
       />
 
-      {/* Final text — YOUR STREAK STARTS NOW. */}
-      {step?.final && (
-        <Animated.View
-          style={[StyleSheet.absoluteFillObject, styles.finalContainer, { opacity: finalTextOpacity }]}
-          pointerEvents="none"
-        >
-          <Text style={styles.finalText}>YOUR STREAK{'\n'}STARTS NOW.</Text>
-        </Animated.View>
-      )}
-
       {/* Tap indicators — steps 2/3/4/5 (reset, streak, badge, settings) */}
       {currentStep === 2 && !resetHoldDone && resetCenter && <TapIndicator key="reset" x={resetCenter.x} y={resetCenter.y} showDot={false} />}
       {currentStep === 3 && streakLayout && (
@@ -627,18 +613,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.background,
-  },
-  finalContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  finalText: {
-    fontFamily: fonts.display,
-    fontSize: 32,
-    color: colors.white,
-    letterSpacing: 5,
-    textAlign: 'center',
-    lineHeight: 48,
   },
   tapDot: {
     position: 'absolute',

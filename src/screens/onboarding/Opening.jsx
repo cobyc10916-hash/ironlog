@@ -38,12 +38,12 @@ export default function Opening({ navigation }) {
         <Text style={styles.brand}>IRONLOG</Text>
         <View style={styles.divider} />
         <Text style={styles.tagline}>
-          THE APP THAT{'\n'}DOESN'T CODDLE YOU
+          THE DISCIPLINE APP{'\n'}THAT DOESN'T CODDLE YOU
         </Text>
         <Animated.View style={[styles.beginWrapper, { transform: [{ scale: pulse }] }]}>
           <TouchableOpacity
             style={styles.beginButton}
-            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.navigate('Intensity'); }}
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.navigate('Manifesto'); }}
             activeOpacity={0.8}
           >
             <Text style={styles.beginText}>BEGIN</Text>
@@ -95,11 +95,11 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontFamily: fonts.display,
-    fontSize: 19,
+    fontSize: 15,
     color: colors.white,
     letterSpacing: 4,
     textAlign: 'center',
-    lineHeight: 32,
+    lineHeight: 26,
   },
   beginWrapper: {
     marginTop: 40,

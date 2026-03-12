@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   },
   labelContainer: {
     position: 'absolute',
-    top: '60%',
+    top: '48%',
     left: 24,
     right: 24,
     zIndex: 52,

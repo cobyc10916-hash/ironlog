@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
   upperSection: {
     flex: 1,
     justifyContent: 'center',
+    paddingTop: 48,
   },
 
   // Bottom group: stacks naturally, anchored to bottom

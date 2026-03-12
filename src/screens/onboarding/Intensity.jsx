@@ -28,16 +28,7 @@ export default function Intensity({ navigation, route }) {
 
       {!isEditing && <OnboardingProgress currentStep={1} />}
 
-      <TouchableOpacity
-        style={styles.backBtn}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); navigation?.goBack(); }}
-        activeOpacity={0.6}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-      >
-        <Ionicons name="chevron-back" size={26} color={colors.white} />
-      </TouchableOpacity>
-
-      <View style={styles.group}>
+<View style={styles.group}>
         <Text style={styles.heading}>CHOOSE YOUR{'\n'}INTENSITY</Text>
 
         <View style={styles.buttons}>
