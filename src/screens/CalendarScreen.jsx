@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useStreakContext } from '../context/StreakContext';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
@@ -20,30 +21,13 @@ function getTodayStr() {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-function buildMockData() {
-  const clean = new Set();
-  const relapse = new Set();
-
-  // February: Feb 16–20 clean
-  for (let d = 16; d <= 20; d++) clean.add(`2026-02-${pad2(d)}`);
-  // Feb 21–24: empty (unverified/missed) — no entries
-  // Feb 25: clean
-  clean.add('2026-02-25');
-  // Feb 26–28: relapse (hollow + skull)
-  for (let d = 26; d <= 28; d++) relapse.add(`2026-02-${pad2(d)}`);
-
-  // March: March 1–9 clean streak (today = March 9)
-  for (let d = 1; d <= 9; d++) clean.add(`2026-03-${pad2(d)}`);
-  // March 9+: empty (future) — no entries
-
-  return { clean, relapse };
-}
-
-const { clean: CLEAN_DAYS, relapse: RELAPSE_DAYS } = buildMockData();
-// App start: Feb 16 2026 — navigation cannot go earlier than February 2026
-const APP_START = { year: 2026, month: 2 };
+// App start: March 8 2026 — navigation cannot go earlier than March 2026
+const APP_START = { year: 2026, month: 3 };
+const JOIN_DATE_STRING = '2026-03-08';
+const EMPTY_SET = new Set();
 
 export default function CalendarScreen({ navigation }) {
+  const { cleanDays } = useStreakContext();
   const now = new Date();
   const todayString = getTodayStr();
 
@@ -108,9 +92,10 @@ export default function CalendarScreen({ navigation }) {
         <CalendarGrid
           year={viewYear}
           month={viewMonth}
-          cleanDays={CLEAN_DAYS}
-          relapseDays={RELAPSE_DAYS}
+          cleanDays={cleanDays}
+          relapseDays={EMPTY_SET}
           todayString={todayString}
+          joinDateString={JOIN_DATE_STRING}
         />
       </View>
 

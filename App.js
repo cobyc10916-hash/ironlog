@@ -3,6 +3,7 @@ import { useFonts } from 'expo-font';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { NavigationContainer } from '@react-navigation/native';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
+import { StreakProvider } from './src/context/StreakContext';
 import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 
 const BLACK = { flex: 1, backgroundColor: '#0a0a0a' };
@@ -28,7 +29,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SettingsProvider>
-        <AppContent fontsLoaded={fontsLoaded} />
+        <StreakProvider>
+          <AppContent fontsLoaded={fontsLoaded} />
+        </StreakProvider>
       </SettingsProvider>
     </SafeAreaProvider>
   );

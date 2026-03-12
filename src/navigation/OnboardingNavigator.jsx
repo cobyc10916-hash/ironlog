@@ -7,6 +7,9 @@ import Manifesto from '../screens/onboarding/Manifesto';
 import Demo from '../screens/onboarding/Demo';
 import Paywall from '../screens/onboarding/Paywall';
 import HomeScreen from '../screens/HomeScreen';
+import CalendarScreen from '../screens/CalendarScreen';
+import BadgeScreen from '../screens/BadgeScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 import SignInScreen from '../screens/SignInScreen';
 import CreateAccountScreen from '../screens/CreateAccountScreen';
 
@@ -15,7 +18,7 @@ const Stack = createStackNavigator();
 export default function OnboardingNavigator() {
   return (
     <Stack.Navigator
-      initialRouteName="Demo"
+      initialRouteName="Home"
       detachInactiveScreens={false}
       screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
     >
@@ -29,6 +32,9 @@ export default function OnboardingNavigator() {
       <Stack.Screen name="Paywall"                component={Paywall} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="CreateAccount"          component={CreateAccountScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Home"                   component={HomeScreen} />
+      <Stack.Screen name="Calendar"               component={CalendarScreen} />
+      <Stack.Screen name="Badge"                  component={BadgeScreen} />
+      <Stack.Screen name="Settings"               component={SettingsScreen} />
     </Stack.Navigator>
   );
 }

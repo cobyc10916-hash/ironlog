@@ -1,10 +1,12 @@
-import { memo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { memo, useRef, useEffect, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, Dimensions, TouchableOpacity, Animated, Easing } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
+import { BADGE_DATA } from '../constants/badges';
+import { useStreakContext } from '../context/StreakContext';
 
 // ─── Sizing ────────────────────────────────────────────────────────────────────
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -14,53 +16,11 @@ const ROW_GAP   = 24;
 const BADGE_W   = Math.floor((SCREEN_WIDTH - H_PADDING * 2 - COL_GAP * 2) / 3);
 const BADGE_H   = Math.round(BADGE_W * 1.16);
 
-// ─── Mock — swap for Supabase streak ───────────────────────────────────────────
-const currentStreak = 21;
-
-// ─── Badge data ────────────────────────────────────────────────────────────────
-// Row 1: 1D 3D 5D  |  Row 2: 1W 2W 1M  |  Row 3+: monthly/yearly
-const BADGE_DATA = [
-  { number: '1',  unit: 'DAY',    days: 1    },
-  { number: '3',  unit: 'DAYS',   days: 3    },
-  { number: '5',  unit: 'DAYS',   days: 5    },
-  { number: '1',  unit: 'WEEK',   days: 7    },
-  { number: '2',  unit: 'WEEKS',  days: 14   },
-  { number: '1',  unit: 'MONTH',  days: 30   },
-  { number: '2',  unit: 'MONTHS', days: 60   },
-  { number: '3',  unit: 'MONTHS', days: 90   },
-  { number: '4',  unit: 'MONTHS', days: 120  },
-  { number: '5',  unit: 'MONTHS', days: 150  },
-  { number: '6',  unit: 'MONTHS', days: 180  },
-  { number: '7',  unit: 'MONTHS', days: 210  },
-  { number: '8',  unit: 'MONTHS', days: 240  },
-  { number: '9',  unit: 'MONTHS', days: 270  },
-  { number: '10', unit: 'MONTHS', days: 300  },
-  { number: '11', unit: 'MONTHS', days: 330  },
-  { number: '1',  unit: 'YEAR',   days: 365  },
-  { number: '2',  unit: 'YEARS',  days: 730  },
-  { number: '3',  unit: 'YEARS',  days: 1095 },
-  { number: '5',  unit: 'YEARS',  days: 1825 },
-];
-
-// ─── Row chunks ────────────────────────────────────────────────────────────────
+// ─── Row chunks (static — BADGE_DATA never changes) ───────────────────────────
 const ROWS = [];
 for (let i = 0; i < BADGE_DATA.length; i += 3) {
   ROWS.push(BADGE_DATA.slice(i, i + 3));
 }
-
-// ─── Progress to next milestone ────────────────────────────────────────────────
-const _lastEarned  = [...BADGE_DATA].reverse().find(b => b.days <= currentStreak);
-const _nextBadge   = BADGE_DATA.find(b => b.days > currentStreak);
-const PROGRESS     = _nextBadge && _lastEarned
-  ? (currentStreak - _lastEarned.days) / (_nextBadge.days - _lastEarned.days)
-  : _nextBadge ? 0 : 1;
-const PROGRESS_PCT = Math.round(PROGRESS * 100);
-const NEXT_LABEL   = _nextBadge
-  ? `${_nextBadge.number} ${_nextBadge.unit}`
-  : 'ALL EARNED';
-const DAYS_LABEL   = _nextBadge
-  ? `${currentStreak} / ${_nextBadge.days} DAYS`
-  : `${currentStreak} DAYS`;
 
 // ─── Iron Hex paths (viewBox "0 0 100 120") ───────────────────────────────────
 //
@@ -130,45 +90,99 @@ const HEX_INNER = [
 ].join(' ');
 
 // ─── BadgeInsignia ──────────────────────────────────────────────────────────────
-const BadgeInsignia = memo(function BadgeInsignia({ number, unit, isEarned }) { return (
-  <View style={[styles.badge, !isEarned && styles.badgeUnearned]}>
-    <Svg
-      width={BADGE_W}
-      height={BADGE_H}
-      viewBox="4 7 92 106"
-      style={StyleSheet.absoluteFill}
-    >
-      {/* White fill + outer stroke — the face of the hex plate */}
-      <Path
-        d={HEX_OUTER}
-        fill="#ffffff"
-        stroke="#ffffff"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      {/* Recessed inlay channel — dark groove ring, 4px uniform inset */}
-      <Path
-        d={HEX_INNER}
-        fill="none"
-        stroke="#0a0a0a"
-        strokeWidth="4"
-        strokeLinejoin="round"
-      />
-    </Svg>
 
-    <View style={styles.textOverlay}>
-      <Text style={[styles.numberText, { color: '#0a0a0a' }, number === '5' && { marginLeft: -4 }]}>
-        {number}
-      </Text>
-      <Text style={[styles.unitText, { color: '#0a0a0a' }]}>
-        {unit}
-      </Text>
-    </View>
-  </View>
-); });
+const BadgeInsignia = memo(function BadgeInsignia({ number, unit, isEarned, isRevealing, revealAnim }) {
+  // Single Animated.View for all states — prevents native remount flicker on state transitions.
+  // opacity: animated during reveal, 1 when earned, 0.2 when unearned.
+  const opacity = isRevealing && revealAnim ? revealAnim : isEarned ? 1 : 0.2;
+  return (
+    <Animated.View style={[styles.badge, { opacity }]}>
+      <Svg width={BADGE_W} height={BADGE_H} viewBox="4 7 92 106" style={StyleSheet.absoluteFill}>
+        <Path d={HEX_OUTER} fill="#ffffff" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+        <Path d={HEX_INNER} fill="none" stroke="#0a0a0a" strokeWidth="4" strokeLinejoin="round" />
+      </Svg>
+      <View style={styles.textOverlay}>
+        <Text style={[styles.numberText, { color: '#0a0a0a' }, number === '5' && { marginLeft: -4 }]}>{number}</Text>
+        <Text style={[styles.unitText, { color: '#0a0a0a' }]}>{unit}</Text>
+      </View>
+    </Animated.View>
+  );
+});
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function BadgeScreen({ navigation }) {
+  const { streak: currentStreak } = useStreakContext();
+
+  const _nextBadge   = BADGE_DATA.find(b => b.days > currentStreak);
+  const PROGRESS_PCT = _nextBadge ? Math.min((currentStreak / _nextBadge.days) * 100, 100) : 100;
+
+  const progressAnim = useRef(new Animated.Value(PROGRESS_PCT)).current;
+  const newBadgeRevealAnim = useRef(new Animated.Value(0)).current;
+  const [revealingBadgeDays, setRevealingBadgeDays] = useState(null);
+  const [displayNextBadge, setDisplayNextBadge] = useState(_nextBadge);
+  // displayStreak lags behind currentStreak during a reveal so the badge stays dim until revealed
+  const [displayStreak, setDisplayStreak] = useState(currentStreak);
+  const prevNextBadgeRef = useRef(_nextBadge);
+
+  const NEXT_LABEL = displayNextBadge
+    ? `${displayNextBadge.number} ${displayNextBadge.unit}`
+    : 'ALL EARNED';
+  const DAYS_LABEL = displayNextBadge
+    ? `${currentStreak} / ${displayNextBadge.days} DAYS`
+    : `${currentStreak} DAYS`;
+
+  useEffect(() => {
+    const prevNextBadge = prevNextBadgeRef.current;
+    prevNextBadgeRef.current = _nextBadge;
+
+    // Badge milestone crossed — fill bar, hold, reveal badge, hold, then show new target
+    if (prevNextBadge && _nextBadge && prevNextBadge.days < _nextBadge.days) {
+      // Immediately mark badge as revealing — start at 0.2 to match unearned opacity (seamless handoff)
+      newBadgeRevealAnim.setValue(0.2);
+      setRevealingBadgeDays(prevNextBadge.days);
+
+      Animated.timing(progressAnim, {
+        toValue: 100,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => {
+        // Hold at 100% with X/X label, then fade badge in
+        setTimeout(() => {
+          Animated.timing(newBadgeRevealAnim, {
+            toValue: 1,
+            duration: 1600,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: true,
+          }).start(() => {
+            // Hold badge fully visible, then transition to new progress target
+            setTimeout(() => {
+              setRevealingBadgeDays(null);
+              setDisplayStreak(currentStreak);
+              setDisplayNextBadge(_nextBadge);
+              Animated.timing(progressAnim, {
+                toValue: PROGRESS_PCT,
+                duration: 600,
+                easing: Easing.out(Easing.cubic),
+                useNativeDriver: false,
+              }).start();
+            }, 2000);
+          });
+        }, 1000);
+      });
+      return;
+    }
+
+    setDisplayStreak(currentStreak);
+    setDisplayNextBadge(_nextBadge);
+    Animated.timing(progressAnim, {
+      toValue: PROGRESS_PCT,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [PROGRESS_PCT]);
+
   return (
     <SafeAreaView style={styles.root}>
 
@@ -192,7 +206,13 @@ export default function BadgeScreen({ navigation }) {
           {_nextBadge ? `NEXT: ${NEXT_LABEL}` : NEXT_LABEL}
         </Text>
         <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${PROGRESS_PCT}%` }]} />
+          <Animated.View style={[styles.progressFill, {
+            width: progressAnim.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%'],
+              extrapolate: 'clamp',
+            }),
+          }]} />
         </View>
         <Text style={styles.progressDays}>{DAYS_LABEL}</Text>
       </View>
@@ -211,7 +231,9 @@ export default function BadgeScreen({ navigation }) {
                 key={badge.days}
                 number={badge.number}
                 unit={badge.unit}
-                isEarned={badge.days <= currentStreak}
+                isEarned={badge.days <= displayStreak}
+                isRevealing={revealingBadgeDays === badge.days}
+                revealAnim={newBadgeRevealAnim}
               />
             ))}
           </View>

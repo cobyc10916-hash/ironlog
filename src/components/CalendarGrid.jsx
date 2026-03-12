@@ -24,7 +24,7 @@ export function toDateStr(year, month1, day) {
 }
 
 // year: full year, month: 1-indexed
-export default function CalendarGrid({ year, month, cleanDays, relapseDays, todayString }) {
+export default function CalendarGrid({ year, month, cleanDays, relapseDays, todayString, joinDateString }) {
   // Build the Sunday-start grid for the given year/month
   const rows = useMemo(() => {
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -43,12 +43,20 @@ export default function CalendarGrid({ year, month, cleanDays, relapseDays, toda
     (dayNum) => {
       if (dayNum === null) return 'blank';
       const ds = toDateStr(year, month, dayNum);
+      // Before the user joined — no app data possible
+      if (joinDateString && ds < joinDateString) return 'before-join';
+      // Future dates — nothing has happened yet
+      if (ds > todayString) return 'before-join';
+      // Join date itself is always clean — it's day 1 of the streak
+      if (joinDateString && ds === joinDateString) return 'clean';
       // Skull only if relapse history AND not a future date
       if (relapseDays.has(ds) && ds <= todayString) return 'relapse';
       if (cleanDays.has(ds)) return 'clean';
+      // Opening the app marks today — today is never hollow
+      if (ds === todayString) return 'clean';
       return 'empty';
     },
-    [year, month, cleanDays, relapseDays, todayString]
+    [year, month, cleanDays, relapseDays, todayString, joinDateString]
   );
 
   const renderCell = (dayNum, key) => {
@@ -66,6 +74,7 @@ export default function CalendarGrid({ year, month, cleanDays, relapseDays, toda
             styles.cell,
             state === 'clean' && styles.cellSolid,
             (state === 'empty' || state === 'relapse') && styles.cellHollow,
+            state === 'before-join' && styles.cellBeforeJoin,
           ]}
         >
           {state === 'relapse' && (
@@ -80,6 +89,9 @@ export default function CalendarGrid({ year, month, cleanDays, relapseDays, toda
           )}
           {state === 'empty' && (
             <Text style={styles.dateNumLight}>{dayNum}</Text>
+          )}
+          {state === 'before-join' && (
+            <Text style={styles.dateNumBeforeJoin}>{dayNum}</Text>
           )}
         </View>
         {today && <View style={styles.todayRingOverlay} />}
@@ -171,6 +183,15 @@ const styles = StyleSheet.create({
     fontSize: Math.round(CELL_SIZE * 0.32),
     color: colors.white,
     opacity: 0.55,
+  },
+  cellBeforeJoin: {
+    // No border, no fill — just a dim number
+  },
+  dateNumBeforeJoin: {
+    fontFamily: fonts.body,
+    fontSize: Math.round(CELL_SIZE * 0.32),
+    color: colors.white,
+    opacity: 0.18,
   },
 
   todayRingOverlay: {

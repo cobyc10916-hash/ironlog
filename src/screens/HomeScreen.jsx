@@ -6,7 +6,8 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
-import { useStreak } from '../hooks/useStreak';
+import { BADGE_DATA } from '../constants/badges';
+import { useStreakContext } from '../context/StreakContext';
 
 // Pointy-top hexagon path — same geometry as BadgeScreen (viewBox "4 7 92 106")
 const HEX_OUTER = [
@@ -25,12 +26,43 @@ const HEX_OUTER = [
   'Z',
 ].join(' ');
 
+const HEX_INNER = [
+  'M 47.4 14.5',
+  'Q 50 13 52.6 14.5',
+  'L 88.4 34.5',
+  'Q 91 36 91 39',
+  'L 91 81',
+  'Q 91 84 88.4 85.5',
+  'L 52.6 105.5',
+  'Q 50 107 47.4 105.5',
+  'L 11.6 85.5',
+  'Q 9 84 9 81',
+  'L 9 39',
+  'Q 9 36 11.6 34.5',
+  'Z',
+].join(' ');
+
+const OVERLAY_BADGE_W = 150;
+const OVERLAY_BADGE_H = Math.round(OVERLAY_BADGE_W * 1.16);
+
 const HOLD_DURATION = 3000;
 const GAP = 4;
 const STROKE = 4;
 const BUTTON_RADIUS = 8;
 const QUOTE = 'THE ONLY WAY\nOUT IS THROUGH.';
 const LOGGED_TEXT = 'LOGGED.';
+
+const MILESTONE_DATA = {
+  1:   { number: '1',   unit: 'DAY',    quote: 'FIRST STEP TAKEN.' },
+  3:   { number: '3',   unit: 'DAYS',   quote: 'THE GRIND IS REAL.' },
+  5:   { number: '5',   unit: 'DAYS',   quote: 'KEEP GOING.', lines: ['KEEP', 'GOING'] },
+  7:   { number: '1',   unit: 'WEEK',   quote: 'ONE WEEK FORGED.' },
+  14:  { number: '2',   unit: 'WEEKS',  quote: 'UNBREAKABLE.' },
+  30:  { number: '1',   unit: 'MONTH',  quote: 'THIRTY DAYS OF STEEL.' },
+  60:  { number: '2',   unit: 'MONTHS', quote: 'TWO MONTHS. NO EXCUSES.' },
+  100: { number: '100', unit: 'DAYS',   quote: 'TRIPLE DIGITS. LOCKED IN.' },
+  365: { number: '1',   unit: 'YEAR',   quote: 'ONE YEAR. MISSION COMPLETE.' },
+};
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -44,7 +76,7 @@ function OdometerDigit({ digit, digitHeight, fontSize, animate }) {
     }
     Animated.timing(translateY, {
       toValue: -digitHeight * digit,
-      duration: 500,
+      duration: 800,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: true,
     }).start();
@@ -101,7 +133,7 @@ export function getRingMetrics(bw, bh) {
 
 export default function HomeScreen({
   navigation,
-  initialStreak = 132,
+  initialStreak = 5,
   demoMode = false,
   demoStreak,
   onLayoutMeasured,
@@ -109,9 +141,20 @@ export default function HomeScreen({
   onDemoHoldComplete,
   resetDisabled = false,
 }) {
-  const { longestStreak } = useStreak();
-  const [streak, setStreak] = useState(initialStreak);
-  const prevStreakRef = useRef(initialStreak);
+  const { streak: ctxStreak, setStreak: setCtxStreak, sinceDate: ctxSinceDate, setSinceDate: setCtxSinceDate, longestStreak: ctxLongestStreak } = useStreakContext();
+
+  // Demo mode uses local state to avoid polluting the shared streak context
+  const [demoStreakState, setDemoStreakState] = useState(initialStreak);
+  const demoLongestRef = useRef(initialStreak);
+  demoLongestRef.current = Math.max(demoLongestRef.current, demoStreakState);
+
+  const streak = demoMode ? demoStreakState : ctxStreak;
+  const setStreak = demoMode ? setDemoStreakState : setCtxStreak;
+  const sinceDate = demoMode ? new Date(2026, 2, 8, 22, 0, 0) : ctxSinceDate;
+  const setSinceDate = demoMode ? (() => {}) : setCtxSinceDate;
+  const longestStreak = demoMode ? demoLongestRef.current : ctxLongestStreak;
+
+  const prevStreakRef = useRef(streak);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -125,11 +168,92 @@ export default function HomeScreen({
   const resetRef = useRef(null);
   const daysCleanRef = useRef(null);
 
+  const nextBadge = BADGE_DATA.find(b => b.days > longestStreak);
+  const progressPct = nextBadge ? Math.min((streak / nextBadge.days) * 100, 100) : 100;
+
   const shouldAnimate = !demoMode && streak === prevStreakRef.current + 1;
+
+  const [displayNextBadge, setDisplayNextBadge] = useState(nextBadge);
+  const shownMilestonesRef = useRef(new Set());
+  const progressResetRef = useRef(null);
+  const [badgeOverlayVisible, setBadgeOverlayVisible] = useState(false);
+  const [activeMilestone, setActiveMilestone] = useState(null);
+  const badgeOverlayAnim = useRef(new Animated.Value(0)).current;
+
+  const progress = useRef(new Animated.Value(0)).current;
+  const badgeProgressAnim = useRef(new Animated.Value(progressPct)).current;
+  const sinceOpacity = useRef(new Animated.Value(1)).current;
+  const prevNextBadgeRef = useRef(nextBadge);
 
   useEffect(() => {
     prevStreakRef.current = streak;
   }, [streak]);
+
+  useEffect(() => {
+    const prevNextBadge = prevNextBadgeRef.current;
+    prevNextBadgeRef.current = nextBadge;
+
+    // Badge milestone crossed — fill to 100%, pause, then show new target
+    if (prevNextBadge && nextBadge && prevNextBadge.days < nextBadge.days) {
+      Animated.timing(badgeProgressAnim, {
+        toValue: 100,
+        duration: 400,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start(() => {
+        progressResetRef.current = () => {
+          setDisplayNextBadge(nextBadge);
+          Animated.timing(badgeProgressAnim, {
+            toValue: progressPct,
+            duration: 600,
+            easing: Easing.out(Easing.cubic),
+            useNativeDriver: false,
+          }).start();
+          progressResetRef.current = null;
+        };
+      });
+      return;
+    }
+
+    setDisplayNextBadge(nextBadge);
+    Animated.timing(badgeProgressAnim, {
+      toValue: progressPct,
+      duration: 600,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [progressPct]);
+
+  // Badge milestone overlay
+  useEffect(() => {
+    if (demoMode) return;
+    const data = MILESTONE_DATA[streak];
+    if (!data) return;
+    if (shownMilestonesRef.current.has(streak)) return;
+    shownMilestonesRef.current.add(streak);
+    // Delay until after odometer (800ms) + progress bar fill (400ms) + hold beat (1800ms)
+    const t = setTimeout(() => {
+      setActiveMilestone(data);
+      setBadgeOverlayVisible(true);
+      badgeOverlayAnim.setValue(0);
+      Animated.sequence([
+        Animated.timing(badgeOverlayAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        Animated.timing(badgeOverlayAnim, { toValue: 1, duration: 3500, useNativeDriver: true }),
+        Animated.timing(badgeOverlayAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+      ]).start(() => {
+        setBadgeOverlayVisible(false);
+        progressResetRef.current?.();
+      });
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [streak]);
+
+  // DEV DEMO — remove before shipping: simulates a new day arriving 10s after mount
+  useEffect(() => {
+    if (demoMode) return;
+    const t = setTimeout(() => setStreak(s => s + 1), 10000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Sync demoStreak prop into local streak state when in demo mode
   useEffect(() => {
@@ -137,8 +261,6 @@ export default function HomeScreen({
       setStreak(demoStreak);
     }
   }, [demoMode, demoStreak]);
-
-  const progress = useRef(new Animated.Value(0)).current;
   const ringOpacity = useRef(new Animated.Value(0)).current;
   const flashOpacity = useRef(new Animated.Value(0)).current;
   const numberOpacity = useRef(new Animated.Value(1)).current;
@@ -201,6 +323,16 @@ export default function HomeScreen({
     loggedTypewriterTimers.current.push(setTimeout(tick, charDelay));
   };
 
+  const updateSinceDate = () => {
+    const now = new Date();
+    const sameDay = now.toDateString() === sinceDate.toDateString();
+    if (sameDay) return;
+    Animated.timing(sinceOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
+      setSinceDate(now);
+      Animated.timing(sinceOpacity, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+    });
+  };
+
   const startPulse = () => {
     pulseLoop.current = Animated.loop(
       Animated.sequence([
@@ -237,6 +369,7 @@ export default function HomeScreen({
   const performReset = (withQuote) => {
     isAnimating.current = true;
 
+    Animated.timing(ringOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
     Animated.sequence([
       Animated.timing(flashOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
       Animated.timing(flashOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
@@ -250,6 +383,7 @@ export default function HomeScreen({
             setTimeout(() => {
               Animated.timing(quoteOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
                 setStreak(0);
+                updateSinceDate();
                 progress.setValue(0);
                 clearTypewriter();
                 isAnimating.current = false;
@@ -267,6 +401,7 @@ export default function HomeScreen({
               Animated.timing(loggedOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => {
                 setLoggedVisibleChars(0);
                 setStreak(0);
+                updateSinceDate();
                 progress.setValue(0);
                 clearLoggedTypewriter();
                 isAnimating.current = false;
@@ -344,11 +479,13 @@ export default function HomeScreen({
   });
 
   return (
+    <View style={styles.screenWrapper}>
     <SafeAreaView style={styles.root}>
       <View style={styles.topBar}>
         <TouchableOpacity
           ref={badgeRef}
           onPress={() => navigation.navigate('Badge')}
+          disabled={demoMode}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           onLayout={() => badgeRef.current?.measure((_x, _y, w, h, px, py) => {
@@ -362,6 +499,7 @@ export default function HomeScreen({
         <TouchableOpacity
           ref={settingsRef}
           onPress={() => navigation.navigate('Settings')}
+          disabled={demoMode}
           activeOpacity={0.6}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           onLayout={() => settingsRef.current?.measure((_x, _y, w, h, px, py) => {
@@ -392,48 +530,60 @@ export default function HomeScreen({
         >DAYS CLEAN</Text>
         <View style={[styles.miniDivider, { width: (60 + daysCleanWidth) / 2 }]} />
 
-        <TouchableOpacity
-          ref={streakRef}
-          style={styles.numberContainer}
-          onPress={() => navigation.navigate('Calendar')}
-          activeOpacity={0.8}
-          onLayout={() => streakRef.current?.measure((_x, _y, w, h, px, py) => {
-            onLayoutMeasured?.('streakNumber', { x: px, y: py, width: w, height: h });
-          })}
-        >
-          <Animated.View style={[styles.odometerRow, { opacity: numberOpacity }]}>
-            {streak.toString().split('').map((d, i, arr) => {
-              const numDigits = arr.length;
-              const digitHeight = numDigits >= 4 ? Math.max(60, Math.floor(160 * 3 / numDigits)) : 160;
-              const posFromRight = numDigits - 1 - i;
-              return (
-                <OdometerDigit
-                  key={`digit-${posFromRight}`}
-                  digit={parseInt(d, 10)}
-                  digitHeight={digitHeight}
-                  fontSize={digitHeight}
-                  animate={shouldAnimate}
-                />
-              );
+        {/* Wrapper preserves exact vertical footprint of original numberContainer (marginVertical:48, height:160).
+            SINCE and badge are absolutely positioned inside the bottom margin zone so no flex siblings move. */}
+        <View style={styles.numberWrapper}>
+          <TouchableOpacity
+            ref={streakRef}
+            style={styles.numberContainer}
+            onPress={() => navigation.navigate('Calendar')}
+            disabled={demoMode}
+            activeOpacity={0.8}
+            onLayout={() => streakRef.current?.measure((_x, _y, w, h, px, py) => {
+              onLayoutMeasured?.('streakNumber', { x: px, y: py, width: w, height: h });
             })}
-          </Animated.View>
-          <Animated.View
-            style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: quoteOpacity }]}
           >
-            <Text style={styles.quoteText}>
-              <Text style={{ color: colors.white }}>{QUOTE.slice(0, visibleChars)}</Text>
-              <Text style={{ color: 'transparent' }}>{QUOTE.slice(visibleChars)}</Text>
+            <Animated.View style={[styles.odometerRow, { opacity: numberOpacity }]}>
+              {streak.toString().split('').map((d, i, arr) => {
+                const numDigits = arr.length;
+                const digitHeight = numDigits >= 4 ? Math.max(60, Math.floor(160 * 3 / numDigits)) : 160;
+                const posFromRight = numDigits - 1 - i;
+                return (
+                  <OdometerDigit
+                    key={`digit-${posFromRight}`}
+                    digit={parseInt(d, 10)}
+                    digitHeight={digitHeight}
+                    fontSize={digitHeight}
+                    animate={shouldAnimate}
+                  />
+                );
+              })}
+            </Animated.View>
+            <Animated.View
+              style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: quoteOpacity }]}
+            >
+              <Text style={styles.quoteText}>
+                <Text style={{ color: colors.white }}>{QUOTE.slice(0, visibleChars)}</Text>
+                <Text style={{ color: 'transparent' }}>{QUOTE.slice(visibleChars)}</Text>
+              </Text>
+            </Animated.View>
+            <Animated.View
+              style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: loggedOpacity }]}
+            >
+              <Text style={styles.quoteText}>
+                <Text style={{ color: colors.white }}>{LOGGED_TEXT.slice(0, loggedVisibleChars)}</Text>
+                <Text style={{ color: 'transparent' }}>{LOGGED_TEXT.slice(loggedVisibleChars)}</Text>
+              </Text>
+            </Animated.View>
+          </TouchableOpacity>
+
+          {/* SINCE date — absolutely positioned in the bottom margin zone */}
+          <Animated.View style={[styles.sinceAndBadge, { opacity: sinceOpacity }]}>
+            <Text style={styles.sinceText}>
+              SINCE {sinceDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).toUpperCase()}
             </Text>
           </Animated.View>
-          <Animated.View
-            style={[StyleSheet.absoluteFillObject, styles.quoteContainer, { opacity: loggedOpacity }]}
-          >
-            <Text style={styles.quoteText}>
-              <Text style={{ color: colors.white }}>{LOGGED_TEXT.slice(0, loggedVisibleChars)}</Text>
-              <Text style={{ color: 'transparent' }}>{LOGGED_TEXT.slice(loggedVisibleChars)}</Text>
-            </Text>
-          </Animated.View>
-        </TouchableOpacity>
+        </View>
 
         <Animated.View style={[styles.resetWrapper, { transform: [{ scale: buttonScale }] }]}>
           {buttonLayout.width > 0 && (
@@ -485,7 +635,33 @@ export default function HomeScreen({
 
       {!demoMode && (
         <View style={styles.bottom}>
-          <View style={styles.divider} />
+          {displayNextBadge && (
+            <TouchableOpacity
+              onPress={() => navigation.navigate('Badge')}
+              activeOpacity={0.6}
+              style={styles.nextBadgeSection}
+            >
+              <View style={styles.nextBadgeRow}>
+                <View style={styles.nextBadgeLabel}>
+                  <Text style={styles.nextBadgeText}>NEXT </Text>
+                  <Svg width={13} height={14} viewBox="4 7 92 106" style={{ marginLeft: -2, opacity: 0.7 }}>
+                    <Path d={HEX_OUTER} fill="none" stroke={colors.white} strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" />
+                  </Svg>
+                  <Text style={styles.nextBadgeText}>: {displayNextBadge.number} {displayNextBadge.unit}</Text>
+                </View>
+                <Text style={styles.nextBadgeCount}>{Math.min(streak, displayNextBadge.days)}/{displayNextBadge.days}</Text>
+              </View>
+              <View style={styles.progressPill}>
+                <Animated.View style={[styles.progressFill, {
+                  width: badgeProgressAnim.interpolate({
+                    inputRange: [0, 100],
+                    outputRange: ['0%', '100%'],
+                    extrapolate: 'clamp',
+                  }),
+                }]} />
+              </View>
+            </TouchableOpacity>
+          )}
           <Text style={styles.longestStreak}>LONGEST STREAK: {longestStreak} DAYS</Text>
         </View>
       )}
@@ -510,6 +686,37 @@ export default function HomeScreen({
         </Animated.View>
       </Modal>
     </SafeAreaView>
+
+      {badgeOverlayVisible && activeMilestone && (
+        <Animated.View style={[styles.badgeOverlay, { opacity: badgeOverlayAnim }]}>
+          <Text style={styles.badgeEarnedLabel}>EARNED:</Text>
+          <View style={styles.overlayBadge}>
+            <Svg
+              width={OVERLAY_BADGE_W}
+              height={OVERLAY_BADGE_H}
+              viewBox="4 7 92 106"
+              style={StyleSheet.absoluteFill}
+            >
+              <Path d={HEX_OUTER} fill="#ffffff" stroke="#ffffff" strokeWidth="2" strokeLinejoin="round" />
+              <Path d={HEX_INNER} fill="none" stroke="#0a0a0a" strokeWidth="4" strokeLinejoin="round" />
+            </Svg>
+            <View style={styles.overlayBadgeTextWrapper}>
+              <Text style={styles.overlayBadgeNumber}>{activeMilestone.number}</Text>
+              <Text style={styles.overlayBadgeUnit}>{activeMilestone.unit}</Text>
+            </View>
+          </View>
+          {activeMilestone.lines ? (
+            <View style={styles.badgeQuoteLines}>
+              {activeMilestone.lines.map((word) => (
+                <Text key={word} style={styles.badgeQuoteLine}>{word}</Text>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.badgeQuote}>{activeMilestone.quote}</Text>
+          )}
+        </Animated.View>
+      )}
+    </View>
   );
 }
 
@@ -555,14 +762,26 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.white,
     letterSpacing: 8,
+    marginTop: 16,
+  },
+  numberWrapper: {
+    marginVertical: 48,
+    width: '100%',
+    alignItems: 'center',
   },
   numberContainer: {
     height: 160,
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    marginVertical: 48,
     paddingTop: 24,
+  },
+  sinceAndBadge: {
+    position: 'absolute',
+    top: 178,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   odometerRow: {
     flexDirection: 'row',
@@ -578,6 +797,54 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     letterSpacing: 3,
     lineHeight: 30,
+  },
+  sinceText: {
+    fontFamily: fonts.display,
+    fontSize: 11,
+    color: colors.white,
+    opacity: 0.4,
+    letterSpacing: 3,
+  },
+  nextBadgeSection: {
+    width: '100%',
+    gap: 6,
+  },
+  nextBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  nextBadgeLabel: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  nextBadgeText: {
+    fontFamily: fonts.display,
+    fontSize: 12,
+    color: colors.white,
+    opacity: 0.5,
+    letterSpacing: 2,
+  },
+  nextBadgeCount: {
+    fontFamily: fonts.display,
+    fontSize: 12,
+    color: colors.white,
+    opacity: 0.35,
+    letterSpacing: 1,
+  },
+  progressPill: {
+    width: '100%',
+    height: 7,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: 'rgba(255,255,255,0.6)',
   },
   resetWrapper: {
     marginTop: 16,
@@ -620,6 +887,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     fontSize: 10,
     color: colors.white,
+    opacity: 0.5,
     letterSpacing: 3,
   },
   // Confirmation overlay
@@ -669,5 +937,86 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: colors.background,
     letterSpacing: 6,
+  },
+  screenWrapper: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  badgeOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+    paddingBottom: 120,
+    pointerEvents: 'box-only',
+  },
+  badgeEarnedLabel: {
+    fontFamily: fonts.display,
+    fontSize: 26,
+    color: colors.white,
+    letterSpacing: 8,
+    marginLeft: 10,
+  },
+  overlayBadge: {
+    width: OVERLAY_BADGE_W,
+    height: OVERLAY_BADGE_H,
+    position: 'relative',
+  },
+  overlayBadgeTextWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingBottom: 4,
+    paddingRight: 4,
+  },
+  overlayBadgeNumber: {
+    fontFamily: fonts.display,
+    fontSize: 64,
+    lineHeight: 68,
+    color: '#0a0a0a',
+    textAlign: 'center',
+    letterSpacing: -6,
+  },
+  overlayBadgeUnit: {
+    fontFamily: fonts.display,
+    fontSize: 11,
+    color: '#0a0a0a',
+    letterSpacing: 1.5,
+    textAlign: 'center',
+    marginTop: -2,
+    marginLeft: 6,
+  },
+  badgeQuote: {
+    fontFamily: fonts.display,
+    fontSize: 11,
+    color: colors.white,
+    opacity: 0.35,
+    letterSpacing: 4,
+    marginTop: 20,
+  },
+  badgeQuoteLines: {
+    position: 'absolute',
+    bottom: 210,
+    left: 10,
+    right: 0,
+    alignItems: 'center',
+    gap: 0,
+  },
+  badgeQuoteLine: {
+    fontFamily: fonts.display,
+    fontSize: 36,
+    color: colors.white,
+    opacity: 0.7,
+    letterSpacing: 6,
+    textAlign: 'center',
   },
 });
