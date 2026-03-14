@@ -16,7 +16,7 @@ import LogHistoricalResetScreen from '../screens/LogHistoricalResetScreen';
 
 const Stack = createStackNavigator();
 
-export default function OnboardingNavigator({ onAppReady }) {
+export default function OnboardingNavigator({ onAppReady, hasProAccess }) {
   return (
     <Stack.Navigator
       initialRouteName="Home"
@@ -33,7 +33,7 @@ export default function OnboardingNavigator({ onAppReady }) {
       <Stack.Screen name="Paywall"                component={Paywall} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="CreateAccount"          component={CreateAccountScreen} options={{ gestureEnabled: false }} />
       <Stack.Screen name="Home">
-        {props => <HomeScreen {...props} onAppReady={onAppReady} />}
+        {props => <HomeScreen {...props} onAppReady={onAppReady} hasProAccess={hasProAccess} />}
       </Stack.Screen>
       <Stack.Screen name="Calendar"               component={CalendarScreen} />
       <Stack.Screen name="Badge"                  component={BadgeScreen} />

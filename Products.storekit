@@ -1,0 +1,71 @@
+{
+  "identifier" : "Products",
+  "nonConsumableProducts" : [],
+  "nonRenewingSubscriptionProducts" : [],
+  "products" : [],
+  "subscriptionGroups" : [
+    {
+      "id" : "21977514",
+      "localizations" : [],
+      "name" : "IRONLOG Monthly",
+      "subscriptions" : [
+        {
+          "adHocOfferCodesEnabled" : true,
+          "displayPrice" : "4.99",
+          "familySharable" : false,
+          "groupNumber" : 1,
+          "internalID" : "monthly_internal",
+          "introductoryOffer" : {
+            "duration" : 1,
+            "durationUnit" : "WEEK",
+            "numberOfPeriods" : 1,
+            "offerMode" : "FREE_TRIAL",
+            "offerID" : ""
+          },
+          "localizations" : [
+            {
+              "description" : "Full access to IRONLOG discipline tracking.",
+              "displayName" : "IRONLOG Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.ironlog.disciplineapp.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "IRONLOG Monthly",
+          "subscriptionGroupID" : "21977514",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOfferCodesEnabled" : true,
+          "displayPrice" : "29.99",
+          "familySharable" : false,
+          "groupNumber" : 2,
+          "internalID" : "yearly_internal",
+          "introductoryOffer" : {
+            "duration" : 1,
+            "durationUnit" : "WEEK",
+            "numberOfPeriods" : 1,
+            "offerMode" : "FREE_TRIAL",
+            "offerID" : ""
+          },
+          "localizations" : [
+            {
+              "description" : "Full access to IRONLOG discipline tracking.",
+              "displayName" : "IRONLOG Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.ironlog.disciplineapp.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "IRONLOG Yearly",
+          "subscriptionGroupID" : "21977514",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

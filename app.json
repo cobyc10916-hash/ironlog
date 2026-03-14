@@ -14,8 +14,21 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ironlog.disciplineapp",
+      "storeKitConfiguration": "./Products.storekit",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.16941655300-bbsik1d00uh3ono8hidqadhb6fvs7hkt"
+            ]
+          }
+        ]
+      },
+      "config": {
+        "googleSignIn": {
+          "reservedClientId": "16941655300-bbsik1d00uh3ono8hidqadhb6fvs7hkt.apps.googleusercontent.com"
+        }
       }
     },
     "android": {
@@ -32,7 +45,8 @@
     "plugins": [
       "expo-font",
       "expo-asset",
-      "expo-notifications"
+      "expo-notifications",
+      "@react-native-google-signin/google-signin"
     ],
     "extra": {
       "eas": {

@@ -165,9 +165,44 @@ export default function Notifications({ navigation, route }) {
   const [label1Text,    setLabel1Text]    = useState('');
   const [label2Text,    setLabel2Text]    = useState('');
 
+  const animatingRef        = useRef(false);
   const validOverlayOpacity = useRef(new Animated.Value(0)).current;
   const validBtnsOpacity    = useRef(new Animated.Value(0)).current;
   const [validationType, setValidationType] = useState(null); // null | 'invalid' | 'warning'
+
+  // Block ALL back-navigation while the notification preview overlay is animating.
+  // gestureEnabled: false stops the swipe recognizer; beforeRemove intercepts any
+  // navigation action that would pop this screen — including hardware back and any
+  // gesture that slips through the one-frame window before gestureEnabled commits.
+  useEffect(() => {
+    navigation.setOptions({ gestureEnabled: !overlayShown });
+    if (!overlayShown) return;
+    const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+      e.preventDefault();
+    });
+    return unsubscribe;
+  }, [overlayShown, navigation]);
+
+  // Reset overlay state whenever this screen gains focus.
+  // This handles two cases:
+  //   1. Initial mount — all values are already at defaults, so this is a no-op.
+  //   2. User returns from Demo (swipe-back) — the dark overlay was intentionally
+  //      left mounted while Demo slid in (to prevent the time-picker content from
+  //      flashing during the transition). Now that we're focused again, reset it.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      setOverlayShown(false);
+      overlayOpacity.setValue(0);
+      notif1Slide.setValue(-200);
+      notif2Slide.setValue(-200);
+      label1Opacity.setValue(0);
+      label2Opacity.setValue(0);
+      setLabel1Text('');
+      setLabel2Text('');
+      animatingRef.current = false;
+    });
+    return unsubscribe;
+  }, [navigation]);
 
   const saveAndGoBack = () => {
     setMorningTime(draftMorning);
@@ -184,7 +219,9 @@ export default function Notifications({ navigation, route }) {
       saveAndGoBack();
       return;
     }
-    if (overlayShown) return;
+    if (animatingRef.current) return;
+    animatingRef.current = true;
+    navigation.setOptions({ gestureEnabled: false });
     setOverlayShown(true);
     Animated.timing(overlayOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
       label1Opacity.setValue(1);
@@ -201,10 +238,12 @@ export default function Notifications({ navigation, route }) {
                       Animated.timing(notif2Slide, { toValue: -200, duration: 380, useNativeDriver: true }).start(() => {
                         Animated.timing(label2Opacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
                           setLabel2Text('');
-                          Animated.timing(overlayOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
-                            setOverlayShown(false);
-                            navigation?.navigate('Demo');
-                          });
+                          animatingRef.current = false;
+                          navigation?.navigate('Demo');
+                          // Do NOT call setOverlayShown(false) here.
+                          // The dark overlay stays opaque while Demo slides in, so the
+                          // Notifications time-picker content is never revealed during
+                          // the transition. State is reset on the next focus event below.
                         });
                       });
                     }, 2500);
@@ -408,15 +447,6 @@ export default function Notifications({ navigation, route }) {
         </>
       )}
 
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devSkip}
-          onPress={() => navigation?.navigate('Demo')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.devSkipText}>DEV SKIP</Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 }
@@ -654,21 +684,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.white,
     letterSpacing: 4,
-  },
-  devSkip: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
-    zIndex: 9999,
-  },
-  devSkipText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });

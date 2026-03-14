@@ -200,6 +200,7 @@ export function getRingMetrics(bw, bh) {
 
 export default function HomeScreen({
   navigation,
+  route,
   initialStreak = 5,
   demoMode = false,
   demoStreak,
@@ -208,8 +209,21 @@ export default function HomeScreen({
   onDemoHoldComplete,
   resetDisabled = false,
   onAppReady,
+  hasProAccess = false,
 }) {
   const { streak: ctxStreak, setStreak: setCtxStreak, sinceDate: ctxSinceDate, setSinceDate: setCtxSinceDate, longestStreak: ctxLongestStreak, setLongestStreak: setCtxLongestStreak, pendingMilestone, clearPendingMilestone, setJoinDateString: setCtxJoinDateString, setRelapseDays: setCtxRelapseDays } = useStreakContext();
+
+  useEffect(() => {
+    if (demoMode) return;
+    if (route?.params?.bypassPaywall) return;
+    if (!hasProAccess) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Paywall' }],
+      });
+    }
+  }, [hasProAccess]);
+
   const appReadyCalledRef = useRef(false);
   const isFocusRefetchRef = useRef(false);
 
@@ -292,7 +306,14 @@ export default function HomeScreen({
       }
       setStreakLoaded(true);
     } finally {
-      isFocusRefetchRef.current = false;
+      // Defer the reset so isFocusRefetchRef.current remains true through the
+      // synchronous React commit + effect flush triggered by the state updates
+      // above. The badge check (line ~392) and pendingMilestone effect both gate
+      // on !isFocusRefetchRef.current — if we reset synchronously here (before
+      // effects run), those gates see false and the overlay fires incorrectly.
+      requestAnimationFrame(() => {
+        isFocusRefetchRef.current = false;
+      });
       if (onAppReady && !appReadyCalledRef.current) {
         appReadyCalledRef.current = true;
         requestAnimationFrame(() => {
@@ -304,7 +325,10 @@ export default function HomeScreen({
 
   // Re-fetch on every focus (initial mount + return from any screen)
   useEffect(() => {
-    return navigation.addListener('focus', fetchStreak);
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchStreak();
+    });
+    return unsubscribe;
   }, [navigation, fetchStreak]);
 
   // Demo mode uses local state to avoid polluting the shared streak context
@@ -386,7 +410,7 @@ export default function HomeScreen({
       return;
     }
 
-    if (!demoMode && MILESTONE_DATA[streak] && isFocusedRef.current) {
+    if (!demoMode && MILESTONE_DATA[streak] && isFocusedRef.current && !isFocusRefetchRef.current) {
       milestoneFiredOnScreenRef.current = true;
     }
 

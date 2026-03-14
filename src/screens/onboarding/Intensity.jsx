@@ -52,15 +52,6 @@ export default function Intensity({ navigation, route }) {
         </View>
       </View>
 
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devSkip}
-          onPress={() => navigation?.navigate('NotificationPermission')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.devSkipText}>DEV SKIP</Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 }
@@ -122,21 +113,5 @@ const styles = StyleSheet.create({
   },
   buttonTextSelected: {
     color: colors.background,
-  },
-  devSkip: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
-    zIndex: 9999,
-  },
-  devSkipText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });

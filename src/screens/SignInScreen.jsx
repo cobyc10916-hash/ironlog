@@ -8,10 +8,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+GoogleSignin.configure({ iosClientId: '16941655300-bbsik1d00uh3ono8hidqadhb6fvs7hkt.apps.googleusercontent.com' });
 
 async function flushOnboardingToProfile(userId) {
   const keys = ['onboarding_intensity', 'onboarding_morning_time', 'onboarding_danger_start', 'onboarding_danger_end'];
@@ -55,9 +58,21 @@ export default function SignInScreen({ navigation }) {
     }
   };
 
-  const onGoogleSignIn = () => {
+  const onGoogleSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    console.log('onGoogleSignIn');
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data.idToken;
+      const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      if (error) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await flushOnboardingToProfile(user.id);
+      navigation.navigate('Home');
+    } catch (e) {
+      console.log('GOOGLE_AUTH_ERROR:', e);
+    }
   };
 
   return (

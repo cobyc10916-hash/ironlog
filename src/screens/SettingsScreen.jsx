@@ -9,7 +9,9 @@ import {
   Animated,
   Easing,
   Dimensions,
+  Alert,
 } from 'react-native';
+import Purchases from 'react-native-purchases';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -194,13 +196,9 @@ const DeleteConfirmModal = ({ visible, onYes, onNo }) => {
 };
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
-export default function SettingsScreen({
-  onDeleteAccount,
-  onRestorePurchases,
-  navigation,
-}) {
+export default function SettingsScreen({ navigation }) {
   const [modalType, setModalType] = useState(null); // 'signout' | 'delete' | null
-  const [restoreLabel, setRestoreLabel] = useState(null); // null | 'RESTORED'
+  const [restoring, setRestoring] = useState(false);
 
   const openModal = (type) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -225,14 +223,36 @@ export default function SettingsScreen({
         })
         .catch(err => console.error('SIGN_OUT_ERROR:', err));
     }
-    if (type === 'delete') onDeleteAccount?.();
+    if (type === 'delete') handleDeleteAccount();
   };
 
-  const handleRestore = () => {
+  const handleDeleteAccount = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await supabase.from('profiles').delete().eq('id', user.id);
+        await supabase.functions.invoke('delete-user');
+      }
+      await supabase.auth.signOut();
+      AsyncStorage.removeItem('@ironlog_shown_milestones').catch(() => {});
+      navigation?.navigate('Opening');
+    } catch (e) {
+      console.error('DELETE_ACCOUNT_ERROR:', e);
+      Alert.alert('ERROR', 'Could not delete account. Please try again.');
+    }
+  };
+
+  const handleRestore = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onRestorePurchases?.();
-    setRestoreLabel('RESTORED');
-    setTimeout(() => setRestoreLabel(null), 2000);
+    setRestoring(true);
+    try {
+      await Purchases.restorePurchases();
+      Alert.alert('PURCHASES RESTORED', 'Your subscription has been restored successfully.');
+    } catch (e) {
+      Alert.alert('RESTORE FAILED', 'Could not restore purchases. Please try again.');
+    } finally {
+      setRestoring(false);
+    }
   };
 
   return (
@@ -304,8 +324,12 @@ export default function SettingsScreen({
           />
           <SettingsRow
             label="RESTORE PURCHASES"
-            onPress={handleRestore}
-            rightLabel={restoreLabel ?? '→'}
+            onPress={restoring ? undefined : handleRestore}
+            rightLabel={restoring ? '...' : '→'}
+          />
+          <SettingsRow
+            label="PRIVACY POLICY"
+            onPress={() => Linking.openURL('https://cobyc10916-hash.github.io/ironlog-privacy/')}
             isLast
           />
         </View>

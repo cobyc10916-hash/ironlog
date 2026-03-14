@@ -7,6 +7,14 @@ import { SettingsProvider, useSettings } from './src/context/SettingsContext';
 import { StreakProvider } from './src/context/StreakContext';
 import OnboardingNavigator from './src/navigation/OnboardingNavigator';
 import { supabase } from './src/lib/supabase';
+import Purchases, { LOG_LEVEL } from 'react-native-purchases';
+
+Purchases.setLogLevel(LOG_LEVEL.DEBUG);
+console.log('RC KEY:', process.env.EXPO_PUBLIC_REVENUECAT_API_KEY);
+Purchases.configure({
+  apiKey: process.env.EXPO_PUBLIC_REVENUECAT_API_KEY,
+  usesStoreKit2IfAvailable: true
+});
 
 const styles = StyleSheet.create({
   loading: { flex: 1, backgroundColor: '#0a0a0a', alignItems: 'center', justifyContent: 'center' },
@@ -20,6 +28,7 @@ function AppContent({ fontsLoaded }) {
   const { isReady } = useSettings();
   const [session, setSession] = useState(undefined);
   const [loading, setLoading] = useState(true);
+  const [hasProAccess, setHasProAccess] = useState(false);
   const overlayOpacity = useRef(new Animated.Value(1)).current;
 
   const handleAppReady = useCallback(() => {
@@ -33,12 +42,21 @@ function AppContent({ fontsLoaded }) {
   useEffect(() => {
     let sessionResolved = false;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       sessionResolved = true;
       console.log('SESSION:', session);
       setSession(session);
       // No logged-in user → onboarding path, HomeScreen never mounts, dismiss immediately
       if (!session) setLoading(false);
+      if (session) {
+        try {
+          const customerInfo = await Purchases.getCustomerInfo();
+          setHasProAccess(customerInfo.entitlements.active['pro'] !== undefined);
+        } catch (e) {
+          console.error('RC entitlement check failed:', e);
+          setHasProAccess(false);
+        }
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -46,7 +64,14 @@ function AppContent({ fontsLoaded }) {
       setSession(session);
     });
 
-    return () => subscription.unsubscribe();
+    const purchasesListener = Purchases.addCustomerInfoUpdateListener((customerInfo) => {
+      setHasProAccess(customerInfo.entitlements.active['pro'] !== undefined);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+      purchasesListener.remove();
+    };
   }, []);
 
   // Block everything until fonts, settings, and session are ready
@@ -65,7 +90,7 @@ function AppContent({ fontsLoaded }) {
   return (
     <>
       <NavigationContainer initialState={initialState}>
-        <OnboardingNavigator onAppReady={handleAppReady} />
+        <OnboardingNavigator onAppReady={handleAppReady} hasProAccess={hasProAccess} />
       </NavigationContainer>
       {loading && (
         <Animated.View style={[styles.loadingOverlay, { opacity: overlayOpacity }]}>

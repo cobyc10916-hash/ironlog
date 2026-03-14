@@ -55,7 +55,7 @@ const MOCK_NAV = {
   replace: () => {},
   reset: () => {},
   dispatch: () => {},
-  addListener: () => ({ remove: () => {} }),
+  addListener: () => () => {},
   removeListener: () => {},
   isFocused: () => true,
   canGoBack: () => false,
@@ -606,15 +606,6 @@ export default function Demo({ navigation }) {
         <Text style={styles.skipText}>SKIP</Text>
       </TouchableOpacity>
 
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devSkip}
-          onPress={() => navigation?.navigate('Paywall')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.devSkipText}>DEV SKIP</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -677,21 +668,5 @@ const styles = StyleSheet.create({
   streakArrow: {
     fontSize: 44,
     color: colors.white,
-  },
-  devSkip: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
-    zIndex: 9999,
-  },
-  devSkipText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });

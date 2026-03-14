@@ -8,12 +8,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 import { supabase } from '../lib/supabase';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+GoogleSignin.configure({ iosClientId: '16941655300-bbsik1d00uh3ono8hidqadhb6fvs7hkt.apps.googleusercontent.com' });
 
 async function flushOnboardingToProfile(userId) {
   const keys = ['onboarding_intensity', 'onboarding_morning_time', 'onboarding_danger_start', 'onboarding_danger_end'];
@@ -30,11 +32,7 @@ async function flushOnboardingToProfile(userId) {
   await AsyncStorage.multiRemove(keys);
 }
 
-function GoogleIcon() {
-  return <Text style={[styles.iconText, styles.googleIconText]}>G</Text>;
-}
-
-export default function CreateAccountScreen({ navigation }) {
+export default function CreateAccountScreen({ navigation, route }) {
   const line1 = useRef(new Animated.Value(0)).current;
   const line2 = useRef(new Animated.Value(0)).current;
   const line3 = useRef(new Animated.Value(0)).current;
@@ -77,15 +75,29 @@ export default function CreateAccountScreen({ navigation }) {
       if (error) throw error;
       const { data: { user } } = await supabase.auth.getUser();
       if (user) await flushOnboardingToProfile(user.id);
-      navigation.navigate('Home');
+      const params = route.params?.bypassPaywall ? { bypassPaywall: true } : undefined;
+      navigation.navigate('Home', params);
     } catch (e) {
       console.log('APPLE_AUTH_ERROR:', e);
     }
   };
 
-  const onGoogleSignIn = () => {
+  const onGoogleSignIn = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    console.log('onGoogleSignIn');
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      const idToken = userInfo.data.idToken;
+      const { error } = await supabase.auth.signInWithIdToken({ provider: 'google', token: idToken });
+      if (error) throw error;
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await flushOnboardingToProfile(user.id);
+      const params = route.params?.bypassPaywall ? { bypassPaywall: true } : undefined;
+      navigation.navigate('Home', params);
+    } catch (e) {
+      console.log('GOOGLE_AUTH_ERROR:', e);
+    }
   };
 
   return (
@@ -115,7 +127,6 @@ export default function CreateAccountScreen({ navigation }) {
         />
 
         <TouchableOpacity style={styles.googleButton} onPress={onGoogleSignIn} activeOpacity={0.8}>
-          <GoogleIcon />
           <Text style={styles.googleButtonText}>CONTINUE WITH GOOGLE</Text>
         </TouchableOpacity>
 
@@ -125,15 +136,6 @@ export default function CreateAccountScreen({ navigation }) {
       {/* Bottom spacer */}
       <View style={styles.bottomSpacer} />
 
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devSkip}
-          onPress={() => navigation?.navigate('Home')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.devSkipText}>DEV SKIP</Text>
-        </TouchableOpacity>
-      )}
     </SafeAreaView>
   );
 }
@@ -212,32 +214,19 @@ const styles = StyleSheet.create({
     marginRight: 24,
   },
   googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    height: 56,
-    backgroundColor: 'transparent',
+    width: '100%',
+    height: 50,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.white,
-    borderRadius: 8,
-    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   googleButtonText: {
-    flex: 1,
     fontFamily: fonts.display,
     fontSize: 14,
     color: colors.white,
-    textAlign: 'center',
-    marginRight: 24,
-  },
-  iconText: {
-    width: 24,
-    fontFamily: fonts.display,
-    fontSize: 18,
-    color: colors.background,
-    textAlign: 'center',
-  },
-  googleIconText: {
-    color: colors.white,
+    letterSpacing: 2,
   },
   privacyText: {
     fontFamily: fonts.display,
@@ -250,21 +239,5 @@ const styles = StyleSheet.create({
 
   bottomSpacer: {
     flex: 0.5,
-  },
-  devSkip: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
-    zIndex: 9999,
-  },
-  devSkipText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });

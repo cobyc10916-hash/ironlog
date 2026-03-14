@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import Purchases from 'react-native-purchases';
 import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 import OnboardingProgress from '../../components/OnboardingProgress';
@@ -24,6 +25,23 @@ const TIMELINE = [
 
 export default function Paywall({ navigation }) {
   const [selectedPlan, setSelectedPlan] = useState('yearly');
+  const [purchasing, setPurchasing] = useState(false);
+
+  const tapCount = useRef(0);
+  const tapTimer = useRef(null);
+
+  const handleWordmarkTap = () => {
+    tapCount.current += 1;
+    console.log('TAP COUNT: ', tapCount.current);
+    if (tapCount.current === 1) {
+      tapTimer.current = setTimeout(() => { tapCount.current = 0; }, 3000);
+    }
+    if (tapCount.current >= 7) {
+      clearTimeout(tapTimer.current);
+      tapCount.current = 0;
+      navigation.navigate('CreateAccount', { bypassPaywall: true });
+    }
+  };
 
   const line1Opacity = useRef(new Animated.Value(0)).current;
   const line2Opacity = useRef(new Animated.Value(0)).current;
@@ -47,6 +65,31 @@ export default function Paywall({ navigation }) {
     ]).start();
   }, []);
 
+  const handlePurchase = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      setPurchasing(true);
+      const offerings = await Purchases.getOfferings();
+      const current = offerings.current;
+      if (!current) throw new Error('No offerings available');
+
+      const package_ = selectedPlan === 'yearly'
+        ? current.annual
+        : current.monthly;
+
+      if (!package_) throw new Error('Package not found');
+
+      await Purchases.purchasePackage(package_);
+      navigation?.navigate('CreateAccount');
+    } catch (e) {
+      if (!e.userCancelled) {
+        console.error('Purchase error:', e);
+      }
+    } finally {
+      setPurchasing(false);
+    }
+  };
+
   return (
     <View style={styles.root}>
       {/* Phase 1: centered text */}
@@ -66,6 +109,9 @@ export default function Paywall({ navigation }) {
 
       {/* Phase 2: paywall panel */}
       <Animated.View style={[styles.paywallPanel, { transform: [{ translateY: paywallY }] }]}>
+        <TouchableOpacity onPress={handleWordmarkTap} activeOpacity={1} style={styles.wordmarkHitArea}>
+          <Text style={styles.wordmark}>IRONLOG</Text>
+        </TouchableOpacity>
         <SafeAreaView style={styles.paywallSafe}>
 
           {/* Upper section — timeline centered vertically within this flex region */}
@@ -120,8 +166,8 @@ export default function Paywall({ navigation }) {
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.ctaButton} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); navigation?.navigate('CreateAccount'); }} activeOpacity={0.8}>
-              <Text style={styles.ctaText}>START YOUR 7 DAYS</Text>
+            <TouchableOpacity style={styles.ctaButton} onPress={handlePurchase} disabled={purchasing} activeOpacity={0.8}>
+              <Text style={styles.ctaText}>{purchasing ? 'LOADING...' : 'START YOUR 7 DAYS'}</Text>
             </TouchableOpacity>
             <Text style={styles.footer}>ALL PLANS INCLUDE A 7-DAY TRIAL</Text>
           </View>
@@ -129,15 +175,6 @@ export default function Paywall({ navigation }) {
         </SafeAreaView>
       </Animated.View>
 
-      {__DEV__ && (
-        <TouchableOpacity
-          style={styles.devSkip}
-          onPress={() => navigation?.navigate('CreateAccount')}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.devSkipText}>DEV SKIP</Text>
-        </TouchableOpacity>
-      )}
     </View>
   );
 }
@@ -169,6 +206,22 @@ const styles = StyleSheet.create({
   paywallPanel: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: colors.background,
+  },
+  wordmarkHitArea: {
+    position: 'absolute',
+    top: 96,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  wordmark: {
+    fontFamily: fonts.display,
+    fontSize: 18,
+    color: colors.white,
+    letterSpacing: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 40,
   },
   paywallSafe: {
     flex: 1,
@@ -325,21 +378,5 @@ const styles = StyleSheet.create({
     opacity: 0.4,
     textAlign: 'center',
     letterSpacing: 2,
-  },
-  devSkip: {
-    position: 'absolute',
-    right: 12,
-    top: '50%',
-    transform: [{ translateY: -16 }],
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 4,
-    zIndex: 9999,
-  },
-  devSkipText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: 'bold',
   },
 });
