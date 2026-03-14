@@ -14,6 +14,7 @@ import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 import { useSettings } from '../../context/SettingsContext';
 import OnboardingProgress from '../../components/OnboardingProgress';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const ITEM_HEIGHT = 44;
 const PICKER_HEIGHT = ITEM_HEIGHT * 3;
@@ -42,6 +43,15 @@ function isTimeInRange(time, from, to) {
   if (f === o) return false;
   if (f < o) return t >= f && t <= o;
   return t >= f || t <= o; // wraps midnight
+}
+
+function toHHMM({ hourIdx, minuteIdx, periodIdx }) {
+  let hour = hourIdx + 1;
+  const minute = minuteIdx * 5;
+  const isAM = periodIdx === 0;
+  if (hour === 12 && isAM) hour = 0;
+  else if (hour !== 12 && !isAM) hour += 12;
+  return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 }
 
 function typewriteText(fullText, setter, onComplete) {
@@ -167,6 +177,9 @@ export default function Notifications({ navigation, route }) {
   };
 
   const proceedForward = () => {
+    AsyncStorage.setItem('onboarding_morning_time', toHHMM(draftMorning));
+    AsyncStorage.setItem('onboarding_danger_start', toHHMM(draftDangerFrom));
+    AsyncStorage.setItem('onboarding_danger_end', toHHMM(draftDangerTo));
     if (isEditing) {
       saveAndGoBack();
       return;
@@ -393,6 +406,16 @@ export default function Notifications({ navigation, route }) {
             <Text style={[styles.labelText, { position: 'absolute', top: 0, left: 0, right: 0 }]}>{label2Text}</Text>
           </Animated.View>
         </>
+      )}
+
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.devSkip}
+          onPress={() => navigation?.navigate('Demo')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devSkipText}>DEV SKIP</Text>
+        </TouchableOpacity>
       )}
     </SafeAreaView>
   );
@@ -631,5 +654,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.white,
     letterSpacing: 4,
+  },
+  devSkip: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -16 }],
+    backgroundColor: 'red',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 4,
+    zIndex: 9999,
+  },
+  devSkipText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

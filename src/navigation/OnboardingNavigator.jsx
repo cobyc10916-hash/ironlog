@@ -12,10 +12,11 @@ import BadgeScreen from '../screens/BadgeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SignInScreen from '../screens/SignInScreen';
 import CreateAccountScreen from '../screens/CreateAccountScreen';
+import LogHistoricalResetScreen from '../screens/LogHistoricalResetScreen';
 
 const Stack = createStackNavigator();
 
-export default function OnboardingNavigator() {
+export default function OnboardingNavigator({ onAppReady }) {
   return (
     <Stack.Navigator
       initialRouteName="Home"
@@ -31,10 +32,13 @@ export default function OnboardingNavigator() {
       <Stack.Screen name="Demo"                   component={Demo} />
       <Stack.Screen name="Paywall"                component={Paywall} options={{ animation: 'fade', gestureEnabled: false }} />
       <Stack.Screen name="CreateAccount"          component={CreateAccountScreen} options={{ gestureEnabled: false }} />
-      <Stack.Screen name="Home"                   component={HomeScreen} />
+      <Stack.Screen name="Home">
+        {props => <HomeScreen {...props} onAppReady={onAppReady} />}
+      </Stack.Screen>
       <Stack.Screen name="Calendar"               component={CalendarScreen} />
       <Stack.Screen name="Badge"                  component={BadgeScreen} />
       <Stack.Screen name="Settings"               component={SettingsScreen} />
+      <Stack.Screen name="LogHistoricalReset"     component={LogHistoricalResetScreen} />
     </Stack.Navigator>
   );
 }

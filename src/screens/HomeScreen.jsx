@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, Easing, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +9,7 @@ import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 import { BADGE_DATA } from '../constants/badges';
 import { useStreakContext } from '../context/StreakContext';
+import { supabase } from '../lib/supabase';
 
 // Pointy-top hexagon path — same geometry as BadgeScreen (viewBox "4 7 92 106")
 const HEX_OUTER = [
@@ -52,55 +54,120 @@ const BUTTON_RADIUS = 8;
 const QUOTE = 'THE ONLY WAY\nOUT IS THROUGH.';
 const LOGGED_TEXT = 'LOGGED.';
 
-const MILESTONE_DATA = {
-  1:   { number: '1',   unit: 'DAY',    quote: 'FIRST STEP TAKEN.' },
-  3:   { number: '3',   unit: 'DAYS',   quote: 'THE GRIND IS REAL.' },
-  5:   { number: '5',   unit: 'DAYS',   quote: 'KEEP GOING.', lines: ['KEEP', 'GOING'] },
-  7:   { number: '1',   unit: 'WEEK',   quote: 'ONE WEEK FORGED.' },
-  14:  { number: '2',   unit: 'WEEKS',  quote: 'UNBREAKABLE.' },
-  30:  { number: '1',   unit: 'MONTH',  quote: 'THIRTY DAYS OF STEEL.' },
-  60:  { number: '2',   unit: 'MONTHS', quote: 'TWO MONTHS. NO EXCUSES.' },
-  100: { number: '100', unit: 'DAYS',   quote: 'TRIPLE DIGITS. LOCKED IN.' },
-  365: { number: '1',   unit: 'YEAR',   quote: 'ONE YEAR. MISSION COMPLETE.' },
-};
+const MILESTONE_DATA = Object.fromEntries(
+  BADGE_DATA.map(b => [b.days, { number: b.number, unit: b.unit, lines: ['KEEP', 'GOING'] }])
+);
+
+async function writeBadgeToSupabase(badgeKey) {
+  try {
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError) throw userError;
+    if (!user) throw new Error('No authenticated user');
+    const { error } = await supabase
+      .from('badges')
+      .upsert({ user_id: user.id, badge_key: badgeKey }, { onConflict: 'user_id,badge_key' });
+    if (error) throw error;
+  } catch (err) {
+    console.error('BADGE_EARNED_ERROR:', err);
+  }
+}
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-function OdometerDigit({ digit, digitHeight, fontSize, animate }) {
+function OdometerDigit({ digit, digitHeight, fontSize, animate, enterFromBelow = false, enterDelay = 0, isExiting = false, exitDelay = 0, exitSlideDuration = 500 }) {
+  const prevDigitRef = useRef(digit);
   const translateY = useRef(new Animated.Value(-digitHeight * digit)).current;
+  const containerY = useRef(new Animated.Value(enterFromBelow ? digitHeight * 0.6 : 0)).current;
+  const containerOpacity = useRef(new Animated.Value(enterFromBelow ? 0 : 1)).current;
 
+  // One-shot entrance: slide up from below + fade in
   useEffect(() => {
+    if (!enterFromBelow) return;
+    const t = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(containerY, {
+          toValue: 0,
+          duration: 600,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(containerOpacity, {
+          toValue: 1,
+          duration: 350,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, enterDelay);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Exit: slide up and out, staggered per digit
+  useEffect(() => {
+    if (!isExiting) return;
+    const t = setTimeout(() => {
+      Animated.timing(containerY, {
+        toValue: -180,
+        duration: exitSlideDuration,
+        easing: Easing.in(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }, exitDelay);
+    return () => clearTimeout(t);
+  }, [isExiting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Normal odometer roll for same-digit-count increments
+  useEffect(() => {
+    if (enterFromBelow) return;
+    const prevDigit = prevDigitRef.current;
+    prevDigitRef.current = digit;
+
     if (!animate) {
       translateY.setValue(-digitHeight * digit);
       return;
     }
-    Animated.timing(translateY, {
-      toValue: -digitHeight * digit,
-      duration: 800,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [digit, digitHeight, animate]);
+
+    // Rollover (e.g. units 9→0): animate through duplicate strip, snap back
+    if (prevDigit > digit) {
+      Animated.timing(translateY, {
+        toValue: -digitHeight * (digit + 10),
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start(() => {
+        translateY.setValue(-digitHeight * digit);
+      });
+    } else {
+      Animated.timing(translateY, {
+        toValue: -digitHeight * digit,
+        duration: 800,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [digit, digitHeight, animate]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <View style={{ height: digitHeight, overflow: 'hidden', marginRight: -6 }}>
-      <Animated.View style={{ transform: [{ translateY }] }}>
-        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((d) => (
-          <Text
-            key={d}
-            style={{
-              fontFamily: fonts.display,
-              fontSize,
-              color: colors.white,
-              height: digitHeight,
-              lineHeight: digitHeight,
-            }}
-          >
-            {d}
-          </Text>
-        ))}
-      </Animated.View>
-    </View>
+    <Animated.View style={{ transform: [{ translateY: containerY }], opacity: containerOpacity }}>
+      <View style={{ height: digitHeight, overflow: 'hidden', marginRight: -6 }}>
+        <Animated.View style={{ transform: [{ translateY }] }}>
+          {[0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9].map((d, i) => (
+            <Text
+              key={i}
+              style={{
+                fontFamily: fonts.display,
+                fontSize,
+                color: colors.white,
+                height: digitHeight,
+                lineHeight: digitHeight,
+              }}
+            >
+              {d}
+            </Text>
+          ))}
+        </Animated.View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -140,10 +207,108 @@ export default function HomeScreen({
   onDemoResetComplete,
   onDemoHoldComplete,
   resetDisabled = false,
+  onAppReady,
 }) {
-  const { streak: ctxStreak, setStreak: setCtxStreak, sinceDate: ctxSinceDate, setSinceDate: setCtxSinceDate, longestStreak: ctxLongestStreak } = useStreakContext();
+  const { streak: ctxStreak, setStreak: setCtxStreak, sinceDate: ctxSinceDate, setSinceDate: setCtxSinceDate, longestStreak: ctxLongestStreak, setLongestStreak: setCtxLongestStreak, pendingMilestone, clearPendingMilestone, setJoinDateString: setCtxJoinDateString, setRelapseDays: setCtxRelapseDays } = useStreakContext();
+  const appReadyCalledRef = useRef(false);
+  const isFocusRefetchRef = useRef(false);
+
+  const fetchStreak = useCallback(async () => {
+    if (demoMode) return;
+    isFocusRefetchRef.current = true;
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        console.error('STREAK_CALC_ERROR:', userError);
+        return;
+      }
+      const [
+        { data, error },
+        { data: profileData },
+        { data: relapseData },
+      ] = await Promise.all([
+        supabase.from('streaks').select('current_streak, longest_streak, streak_start_date').eq('user_id', user.id).single(),
+        supabase.from('profiles').select('install_date').eq('id', user.id).single(),
+        supabase.from('resets').select('reset_at, historical_date').eq('user_id', user.id),
+      ]);
+      if (error) {
+        console.error('STREAK_CALC_ERROR:', error);
+        return;
+      }
+      if (!data) return;
+      if (profileData?.install_date) {
+        setCtxJoinDateString(profileData.install_date);
+      }
+      if (relapseData) {
+        function pad2h(n) { return String(n).padStart(2, '0'); }
+        const dates = relapseData.map(row => {
+          const src = row.historical_date || row.reset_at;
+          if (!src) return null;
+          if (/^\d{4}-\d{2}-\d{2}$/.test(src)) return src;
+          const d = new Date(src);
+          return `${d.getFullYear()}-${pad2h(d.getMonth() + 1)}-${pad2h(d.getDate())}`;
+        }).filter(Boolean);
+        setCtxRelapseDays(new Set(dates));
+      }
+
+      // Calculate current streak from streak_start_date in local timezone
+      let currentStreak = 0;
+      if (data.streak_start_date) {
+        const [sy, sm, sd] = data.streak_start_date.slice(0, 10).split('-').map(Number);
+        const startMidnight = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+        const now = new Date();
+        // Full 24-hour periods elapsed in local time
+        const msElapsed = now - startMidnight;
+        currentStreak = Math.max(0, Math.floor(msElapsed / (1000 * 60 * 60 * 24)));
+      }
+
+      // Update longest_streak in Supabase if current exceeds it
+      const longestStreak = data.longest_streak ?? 0;
+      if (currentStreak > longestStreak) {
+        const { error: updateError } = await supabase
+          .from('streaks')
+          .update({ current_streak: currentStreak, longest_streak: currentStreak })
+          .eq('user_id', user.id);
+        if (updateError) {
+          console.error('STREAK_CALC_ERROR:', updateError);
+        }
+        setCtxLongestStreak(currentStreak);
+      } else {
+        // Write calculated current_streak back to Supabase
+        const { error: updateError } = await supabase
+          .from('streaks')
+          .update({ current_streak: currentStreak })
+          .eq('user_id', user.id);
+        if (updateError) {
+          console.error('STREAK_CALC_ERROR:', updateError);
+        }
+        setCtxLongestStreak(longestStreak);
+      }
+
+      setCtxStreak(currentStreak);
+      if (data.streak_start_date) {
+        const [sy, sm, sd] = data.streak_start_date.slice(0, 10).split('-').map(Number);
+        setCtxSinceDate(new Date(sy, sm - 1, sd, 0, 0, 0, 0));
+      }
+      setStreakLoaded(true);
+    } finally {
+      isFocusRefetchRef.current = false;
+      if (onAppReady && !appReadyCalledRef.current) {
+        appReadyCalledRef.current = true;
+        requestAnimationFrame(() => {
+          onAppReady();
+        });
+      }
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-fetch on every focus (initial mount + return from any screen)
+  useEffect(() => {
+    return navigation.addListener('focus', fetchStreak);
+  }, [navigation, fetchStreak]);
 
   // Demo mode uses local state to avoid polluting the shared streak context
+  const [streakLoaded, setStreakLoaded] = useState(false);
   const [demoStreakState, setDemoStreakState] = useState(initialStreak);
   const demoLongestRef = useRef(initialStreak);
   demoLongestRef.current = Math.max(demoLongestRef.current, demoStreakState);
@@ -155,6 +320,10 @@ export default function HomeScreen({
   const longestStreak = demoMode ? demoLongestRef.current : ctxLongestStreak;
 
   const prevStreakRef = useRef(streak);
+  const [displayStreak, setDisplayStreak] = useState(streak);
+  const [isEntering, setIsEntering] = useState(false);
+  const [isExiting, setIsExiting] = useState(false);
+  const shouldAnimateRef = useRef(false);
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
   const [visibleChars, setVisibleChars] = useState(0);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -171,68 +340,222 @@ export default function HomeScreen({
   const nextBadge = BADGE_DATA.find(b => b.days > longestStreak);
   const progressPct = nextBadge ? Math.min((streak / nextBadge.days) * 100, 100) : 100;
 
-  const shouldAnimate = !demoMode && streak === prevStreakRef.current + 1;
+  const shouldAnimate = shouldAnimateRef.current;
 
   const [displayNextBadge, setDisplayNextBadge] = useState(nextBadge);
-  const shownMilestonesRef = useRef(new Set());
   const progressResetRef = useRef(null);
+  // true when the milestone fired while this screen was focused (use longer delay)
+  const milestoneFiredOnScreenRef = useRef(false);
+  // tracks whether this screen is currently focused
+  const isFocusedRef = useRef(true);
+  // Refs for stable access inside timer callbacks (avoids stale closure issues)
+  const overlayTimerRef = useRef(null);
+  const pendingMilestoneRef = useRef(pendingMilestone);
+  pendingMilestoneRef.current = pendingMilestone;
+  const clearPendingMilestoneRef = useRef(clearPendingMilestone);
+  clearPendingMilestoneRef.current = clearPendingMilestone;
   const [badgeOverlayVisible, setBadgeOverlayVisible] = useState(false);
   const [activeMilestone, setActiveMilestone] = useState(null);
   const badgeOverlayAnim = useRef(new Animated.Value(0)).current;
 
   const progress = useRef(new Animated.Value(0)).current;
   const badgeProgressAnim = useRef(new Animated.Value(progressPct)).current;
+  const nextBadgeTextOpacity = useRef(new Animated.Value(0.5)).current;
+  const countTextOpacity = useRef(new Animated.Value(1)).current;
+  const countNumeratorOpacity = useRef(new Animated.Value(0.35)).current;
   const sinceOpacity = useRef(new Animated.Value(1)).current;
   const prevNextBadgeRef = useRef(nextBadge);
+  const [displayLongestStreak, setDisplayLongestStreak] = useState(longestStreak);
+  const longestStreakNumOpacity = useRef(new Animated.Value(0.5)).current;
+  const prevLongestStreakRef = useRef(longestStreak);
+  const lastProgressPctRef = useRef(progressPct);
+  const progressInitializedRef = useRef(false);
 
   useEffect(() => {
+    const prevStreak = prevStreakRef.current;
     prevStreakRef.current = streak;
-  }, [streak]);
+    if (prevStreak === streak) return; // initial mount — no animation needed
+
+    // Initial data load: null → first real value — snap directly, no animation
+    if (prevStreak === null) {
+      setDisplayStreak(streak);
+      setDisplayLongestStreak(longestStreak);
+      countNumeratorOpacity.setValue(0.35);
+      longestStreakNumOpacity.setValue(0.5);
+      prevLongestStreakRef.current = longestStreak;
+      return;
+    }
+
+    if (!demoMode && MILESTONE_DATA[streak] && isFocusedRef.current) {
+      milestoneFiredOnScreenRef.current = true;
+    }
+
+    const isCrossBoundary = !demoMode && streak === prevStreak + 1 &&
+      streak.toString().length > prevStreak.toString().length;
+
+    if (isCrossBoundary) {
+      shouldAnimateRef.current = false;
+      const prevDigitCount = prevStreak.toString().length;
+      const exitStagger  = prevDigitCount >= 3 ? 280 : 160;
+      const exitSlide    = prevDigitCount >= 3 ? 800 : 500;
+      const exitDuration = (prevDigitCount - 1) * exitStagger + exitSlide + 50;
+      setIsExiting(true);
+      setTimeout(() => {
+        setIsExiting(false);
+        const longestChangedCB = longestStreak !== prevLongestStreakRef.current;
+        prevLongestStreakRef.current = longestStreak;
+        const fadeOutAnims = [Animated.timing(countNumeratorOpacity, { toValue: 0, duration: 350, useNativeDriver: true })];
+        if (longestChangedCB) fadeOutAnims.push(Animated.timing(longestStreakNumOpacity, { toValue: 0, duration: 350, useNativeDriver: true }));
+        Animated.parallel(fadeOutAnims).start(() => {
+          setDisplayStreak(streak);
+          if (longestChangedCB) setDisplayLongestStreak(longestStreak);
+          const fadeInAnims = [Animated.timing(countNumeratorOpacity, { toValue: 0.35, duration: 1600, useNativeDriver: true })];
+          if (longestChangedCB) fadeInAnims.push(Animated.timing(longestStreakNumOpacity, { toValue: 0.5, duration: 1600, useNativeDriver: true }));
+          Animated.parallel(fadeInAnims).start();
+          setIsEntering(true);
+          setTimeout(() => {
+            numberOpacity.setValue(1);
+            setIsEntering(false);
+          }, streak.toString().length * 150 + 700);
+        });
+      }, exitDuration);
+      return;
+    }
+
+    // On reset (streak → 0), update display immediately — numberOpacity is 0 during reset animation
+    if (streak === 0) {
+      setDisplayStreak(0);
+      countNumeratorOpacity.setValue(0.35);
+      return;
+    }
+
+    shouldAnimateRef.current = !demoMode && streak === prevStreak + 1;
+    const longestChanged = longestStreak !== prevLongestStreakRef.current;
+    prevLongestStreakRef.current = longestStreak;
+    const fadeOutAnims = [Animated.timing(countNumeratorOpacity, { toValue: 0, duration: 350, useNativeDriver: true })];
+    if (longestChanged) fadeOutAnims.push(Animated.timing(longestStreakNumOpacity, { toValue: 0, duration: 350, useNativeDriver: true }));
+    Animated.parallel(fadeOutAnims).start(() => {
+      setDisplayStreak(streak);
+      if (longestChanged) setDisplayLongestStreak(longestStreak);
+      const fadeInAnims = [Animated.timing(countNumeratorOpacity, { toValue: 0.35, duration: 1400, useNativeDriver: true })];
+      if (longestChanged) fadeInAnims.push(Animated.timing(longestStreakNumOpacity, { toValue: 0.5, duration: 1400, useNativeDriver: true }));
+      Animated.parallel(fadeInAnims).start();
+    });
+  }, [streak]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    // Initial data load — snap once streakLoaded, skip all animations
+    if (!progressInitializedRef.current) {
+      if (!streakLoaded) return; // wait for real data
+      progressInitializedRef.current = true;
+      prevNextBadgeRef.current = nextBadge;
+      setDisplayNextBadge(nextBadge);
+      lastProgressPctRef.current = progressPct;
+      badgeProgressAnim.setValue(progressPct);
+      return;
+    }
+
     const prevNextBadge = prevNextBadgeRef.current;
     prevNextBadgeRef.current = nextBadge;
 
     // Badge milestone crossed — fill to 100%, pause, then show new target
     if (prevNextBadge && nextBadge && prevNextBadge.days < nextBadge.days) {
+      // Set reset ref immediately so it's available even if called before animation completes
+      progressResetRef.current = () => {
+        Animated.parallel([
+          Animated.timing(nextBadgeTextOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+          Animated.timing(countTextOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
+        ]).start(() => {
+          setDisplayNextBadge(nextBadge);
+          Animated.parallel([
+            Animated.timing(badgeProgressAnim, {
+              toValue: progressPct,
+              duration: 600,
+              easing: Easing.out(Easing.cubic),
+              useNativeDriver: false,
+            }),
+            Animated.timing(nextBadgeTextOpacity, { toValue: 0.5, duration: 600, useNativeDriver: true }),
+            Animated.timing(countTextOpacity, { toValue: 1, duration: 600, useNativeDriver: true }),
+          ]).start();
+        });
+        progressResetRef.current = null;
+      };
       Animated.timing(badgeProgressAnim, {
         toValue: 100,
         duration: 400,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: false,
-      }).start(() => {
-        progressResetRef.current = () => {
-          setDisplayNextBadge(nextBadge);
-          Animated.timing(badgeProgressAnim, {
-            toValue: progressPct,
-            duration: 600,
-            easing: Easing.out(Easing.cubic),
-            useNativeDriver: false,
-          }).start();
-          progressResetRef.current = null;
-        };
-      });
+      }).start();
       return;
     }
 
     setDisplayNextBadge(nextBadge);
+    const isDecreasing = progressPct < lastProgressPctRef.current;
+    lastProgressPctRef.current = progressPct;
     Animated.timing(badgeProgressAnim, {
       toValue: progressPct,
-      duration: 600,
+      duration: isDecreasing ? 4000 : 600,
       easing: Easing.out(Easing.cubic),
       useNativeDriver: false,
     }).start();
   }, [progressPct]);
 
-  // Badge milestone overlay
+  // Track screen focus + handle "came back to HomeScreen with pending milestone" case.
+  // Stable deps [demoMode] — fires on every focus event, reads latest values via refs.
+  useFocusEffect(useCallback(() => {
+    isFocusedRef.current = true;
+
+    const pm = pendingMilestoneRef.current;
+    if (!demoMode && pm) {
+      const data = MILESTONE_DATA[pm];
+      if (data) {
+        clearTimeout(overlayTimerRef.current);
+        overlayTimerRef.current = setTimeout(() => {
+          clearPendingMilestoneRef.current(pm);
+          writeBadgeToSupabase(data.number + ' ' + data.unit);
+          setActiveMilestone(data);
+          setBadgeOverlayVisible(true);
+          badgeOverlayAnim.setValue(0);
+          Animated.sequence([
+            Animated.timing(badgeOverlayAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+            Animated.timing(badgeOverlayAnim, { toValue: 1, duration: 3500, useNativeDriver: true }),
+            Animated.timing(badgeOverlayAnim, { toValue: 0, duration: 400, useNativeDriver: true }),
+          ]).start(() => {
+            setBadgeOverlayVisible(false);
+            progressResetRef.current?.();
+          });
+        }, 2000);
+      }
+    } else if (!demoMode) {
+      // No overlay to show — fire any pending progress bar reset immediately.
+      // This handles the case where BadgeScreen consumed the milestone while
+      // the user was there, so the HomeScreen overlay never plays.
+      progressResetRef.current?.();
+    }
+
+    return () => {
+      isFocusedRef.current = false;
+      clearTimeout(overlayTimerRef.current); // cancel pending overlay if user navigates away
+    };
+  }, [demoMode]));
+
+  // Show overlay when milestone fires while this screen is already focused.
+  // Timer lives in overlayTimerRef so useFocusEffect's blur cleanup can cancel it.
+  // clearPendingMilestone is called INSIDE the timer — not before — to avoid triggering
+  // a re-render that would run this effect's cleanup and cancel the timer prematurely.
   useEffect(() => {
-    if (demoMode) return;
-    const data = MILESTONE_DATA[streak];
+    if (demoMode || !pendingMilestone || !isFocusedRef.current || isFocusRefetchRef.current) return;
+    const data = MILESTONE_DATA[pendingMilestone];
     if (!data) return;
-    if (shownMilestonesRef.current.has(streak)) return;
-    shownMilestonesRef.current.add(streak);
-    // Delay until after odometer (800ms) + progress bar fill (400ms) + hold beat (1800ms)
-    const t = setTimeout(() => {
+
+    const delay = milestoneFiredOnScreenRef.current ? 3000 : 2000;
+    milestoneFiredOnScreenRef.current = false;
+    const capturedValue = pendingMilestone;
+
+    clearTimeout(overlayTimerRef.current);
+    overlayTimerRef.current = setTimeout(() => {
+      clearPendingMilestoneRef.current(capturedValue);
+      writeBadgeToSupabase(data.number + ' ' + data.unit);
       setActiveMilestone(data);
       setBadgeOverlayVisible(true);
       badgeOverlayAnim.setValue(0);
@@ -244,16 +567,18 @@ export default function HomeScreen({
         setBadgeOverlayVisible(false);
         progressResetRef.current?.();
       });
-    }, 3000);
-    return () => clearTimeout(t);
-  }, [streak]);
+    }, delay);
+    // No return cleanup — timer is cancelled by useFocusEffect's blur handler above
+  }, [pendingMilestone]);
 
-  // DEV DEMO — remove before shipping: simulates a new day arriving 10s after mount
+  // If pendingMilestone was consumed by BadgeScreen (user watched the reveal there),
+  // the HomeScreen overlay never fires — but we still need to reset the progress bar.
   useEffect(() => {
-    if (demoMode) return;
-    const t = setTimeout(() => setStreak(s => s + 1), 10000);
-    return () => clearTimeout(t);
-  }, []);
+    if (pendingMilestone !== null) return; // not cleared yet
+    if (badgeOverlayVisible) return; // overlay is showing — its own callback handles the reset
+    progressResetRef.current?.();
+  }, [pendingMilestone]);
+
 
   // Sync demoStreak prop into local streak state when in demo mode
   useEffect(() => {
@@ -268,6 +593,13 @@ export default function HomeScreen({
   const loggedOpacity = useRef(new Animated.Value(0)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const contentOpacity = useRef(new Animated.Value(demoMode ? 1 : ctxStreak !== null ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (streakLoaded) {
+      contentOpacity.setValue(1); // snap — loading overlay already handled the visual transition
+    }
+  }, [streakLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const holdAnim = useRef(null);
   const pulseLoop = useRef(null);
@@ -323,16 +655,6 @@ export default function HomeScreen({
     loggedTypewriterTimers.current.push(setTimeout(tick, charDelay));
   };
 
-  const updateSinceDate = () => {
-    const now = new Date();
-    const sameDay = now.toDateString() === sinceDate.toDateString();
-    if (sameDay) return;
-    Animated.timing(sinceOpacity, { toValue: 0, duration: 300, useNativeDriver: true }).start(() => {
-      setSinceDate(now);
-      Animated.timing(sinceOpacity, { toValue: 1, duration: 800, useNativeDriver: true }).start();
-    });
-  };
-
   const startPulse = () => {
     pulseLoop.current = Animated.loop(
       Animated.sequence([
@@ -369,12 +691,45 @@ export default function HomeScreen({
   const performReset = (withQuote) => {
     isAnimating.current = true;
 
+    // Capture reset time upfront for use in callbacks
+    const now = new Date();
+    const sinceDateChanged = now.toDateString() !== sinceDate.toDateString();
+
+    // Write reset to Supabase (skipped entirely in demo mode)
+    if (!demoMode) {
+      const streakAtReset = streak;
+      const nowIso = now.toISOString();
+      (async () => {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError || !user) {
+          console.error('RESET_ERROR:', userError);
+          return;
+        }
+        const { error: insertError } = await supabase
+          .from('resets')
+          .insert({ user_id: user.id, reset_at: nowIso, streak_broken: streakAtReset, was_historical: false });
+        if (insertError) {
+          console.error('RESET_ERROR:', insertError);
+        }
+        const { error: updateError } = await supabase
+          .from('streaks')
+          .update({ current_streak: 0, streak_start_date: nowIso, last_updated: nowIso })
+          .eq('user_id', user.id);
+        if (updateError) {
+          console.error('RESET_ERROR:', updateError);
+        }
+      })();
+    }
+
     Animated.timing(ringOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start();
     Animated.sequence([
       Animated.timing(flashOpacity, { toValue: 1, duration: 100, useNativeDriver: true }),
       Animated.timing(flashOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
     ]).start(() => {
-      Animated.timing(numberOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
+      // Fade out streak number and since date together
+      const fadeOutAnims = [Animated.timing(numberOpacity, { toValue: 0, duration: 500, useNativeDriver: true })];
+      if (sinceDateChanged) fadeOutAnims.push(Animated.timing(sinceOpacity, { toValue: 0, duration: 500, useNativeDriver: true }));
+      Animated.parallel(fadeOutAnims).start(() => {
         if (withQuote) {
           lastQuoteTime.current = Date.now();
           setVisibleChars(0);
@@ -383,12 +738,15 @@ export default function HomeScreen({
             setTimeout(() => {
               Animated.timing(quoteOpacity, { toValue: 0, duration: 500, useNativeDriver: true }).start(() => {
                 setStreak(0);
-                updateSinceDate();
+                if (sinceDateChanged) setSinceDate(now);
                 progress.setValue(0);
                 clearTypewriter();
                 isAnimating.current = false;
                 isComplete.current = false;
                 Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+                  if (sinceDateChanged) {
+                    Animated.timing(sinceOpacity, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+                  }
                   if (demoMode) onDemoResetComplete?.();
                 });
               });
@@ -401,12 +759,16 @@ export default function HomeScreen({
               Animated.timing(loggedOpacity, { toValue: 0, duration: 400, useNativeDriver: true }).start(() => {
                 setLoggedVisibleChars(0);
                 setStreak(0);
-                updateSinceDate();
+                if (sinceDateChanged) setSinceDate(now);
                 progress.setValue(0);
                 clearLoggedTypewriter();
                 isAnimating.current = false;
                 isComplete.current = false;
-                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+                Animated.timing(numberOpacity, { toValue: 1, duration: 500, useNativeDriver: true }).start(() => {
+                  if (sinceDateChanged) {
+                    Animated.timing(sinceOpacity, { toValue: 1, duration: 800, useNativeDriver: true }).start();
+                  }
+                });
               });
             }, 800);
           });
@@ -518,21 +880,21 @@ export default function HomeScreen({
       </View>
 
       <View style={styles.center}>
-        <Text
-          ref={daysCleanRef}
-          style={styles.daysClean}
-          onLayout={(e) => {
-            setDaysCleanWidth(e.nativeEvent.layout.width);
-            daysCleanRef.current?.measure((_x, _y, w, h, px, py) => {
-              onLayoutMeasured?.('daysClean', { x: px, y: py, width: w, height: h });
-            });
-          }}
-        >DAYS CLEAN</Text>
-        <View style={[styles.miniDivider, { width: (60 + daysCleanWidth) / 2 }]} />
-
-        {/* Wrapper preserves exact vertical footprint of original numberContainer (marginVertical:48, height:160).
-            SINCE and badge are absolutely positioned inside the bottom margin zone so no flex siblings move. */}
-        <View style={styles.numberWrapper}>
+        <Animated.View style={{ opacity: contentOpacity, alignItems: 'center', width: '100%' }}>
+          <View style={{ alignItems: 'center', transform: [{ translateY: 10 }] }}>
+          <Text
+            ref={daysCleanRef}
+            style={styles.daysClean}
+            onLayout={(e) => {
+              setDaysCleanWidth(e.nativeEvent.layout.width);
+              daysCleanRef.current?.measure((_x, _y, w, h, px, py) => {
+                onLayoutMeasured?.('daysClean', { x: px, y: py, width: w, height: h });
+              });
+            }}
+          >DAYS CLEAN</Text>
+          <View style={[styles.miniDivider, { width: (60 + daysCleanWidth) / 2 }]} />
+          </View>
+          <View style={styles.numberWrapper}>
           <TouchableOpacity
             ref={streakRef}
             style={styles.numberContainer}
@@ -543,18 +905,23 @@ export default function HomeScreen({
               onLayoutMeasured?.('streakNumber', { x: px, y: py, width: w, height: h });
             })}
           >
-            <Animated.View style={[styles.odometerRow, { opacity: numberOpacity }]}>
-              {streak.toString().split('').map((d, i, arr) => {
+            <Animated.View style={[styles.odometerRow, !isEntering && !isExiting && { opacity: numberOpacity }]}>
+              {streak !== null && displayStreak != null && displayStreak.toString().split('').map((d, i, arr) => {
                 const numDigits = arr.length;
                 const digitHeight = numDigits >= 4 ? Math.max(60, Math.floor(160 * 3 / numDigits)) : 160;
                 const posFromRight = numDigits - 1 - i;
                 return (
                   <OdometerDigit
-                    key={`digit-${posFromRight}`}
+                    key={`digit-${posFromRight}-${numDigits}`}
                     digit={parseInt(d, 10)}
                     digitHeight={digitHeight}
                     fontSize={digitHeight}
-                    animate={shouldAnimate}
+                    animate={!isEntering && !isExiting && shouldAnimate}
+                    enterFromBelow={isEntering}
+                    enterDelay={isEntering ? i * 150 : 0}
+                    isExiting={isExiting}
+                    exitDelay={isExiting ? i * (numDigits >= 3 ? 280 : 160) : 0}
+                    exitSlideDuration={numDigits >= 3 ? 800 : 500}
                   />
                 );
               })}
@@ -584,7 +951,9 @@ export default function HomeScreen({
             </Text>
           </Animated.View>
         </View>
+        </Animated.View>
 
+        <View style={{ alignItems: 'center' }}>
         <Animated.View style={[styles.resetWrapper, { transform: [{ scale: buttonScale }] }]}>
           {buttonLayout.width > 0 && (
             <Animated.View style={{ opacity: ringOpacity }} pointerEvents="none">
@@ -629,6 +998,15 @@ export default function HomeScreen({
             <Text style={styles.resetText}>RESET</Text>
           </TouchableOpacity>
         </Animated.View>
+          {__DEV__ && !demoMode && (
+            <TouchableOpacity
+              onPress={() => setStreak(s => s + 1)}
+              style={{ position: 'absolute', top: '100%', marginTop: 12, backgroundColor: 'rgba(255,255,255,0.15)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 4 }}
+            >
+              <Text style={{ fontFamily: fonts.display, fontSize: 10, color: colors.white, letterSpacing: 1 }}>DEV +1 DAY</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <View style={styles.bottomSpacer} />
@@ -639,7 +1017,7 @@ export default function HomeScreen({
             <TouchableOpacity
               onPress={() => navigation.navigate('Badge')}
               activeOpacity={0.6}
-              style={styles.nextBadgeSection}
+              style={[styles.nextBadgeSection, { opacity: contentOpacity }]}
             >
               <View style={styles.nextBadgeRow}>
                 <View style={styles.nextBadgeLabel}>
@@ -647,9 +1025,13 @@ export default function HomeScreen({
                   <Svg width={13} height={14} viewBox="4 7 92 106" style={{ marginLeft: -2, opacity: 0.7 }}>
                     <Path d={HEX_OUTER} fill="none" stroke={colors.white} strokeWidth="8" strokeLinejoin="round" strokeLinecap="round" />
                   </Svg>
-                  <Text style={styles.nextBadgeText}>: {displayNextBadge.number} {displayNextBadge.unit}</Text>
+                  <Text style={styles.nextBadgeText}>: </Text>
+                  <Animated.Text style={[styles.nextBadgeText, { opacity: nextBadgeTextOpacity }]}>{displayNextBadge.number} {displayNextBadge.unit}</Animated.Text>
                 </View>
-                <Text style={styles.nextBadgeCount}>{Math.min(streak, displayNextBadge.days)}/{displayNextBadge.days}</Text>
+                <Animated.View style={{ flexDirection: 'row', opacity: countTextOpacity }}>
+                  <Animated.Text style={[styles.nextBadgeCount, { opacity: countNumeratorOpacity }]}>{Math.min(displayStreak, displayNextBadge.days)}</Animated.Text>
+                  <Text style={styles.nextBadgeCount}>/{displayNextBadge.days}</Text>
+                </Animated.View>
               </View>
               <View style={styles.progressPill}>
                 <Animated.View style={[styles.progressFill, {
@@ -662,7 +1044,10 @@ export default function HomeScreen({
               </View>
             </TouchableOpacity>
           )}
-          <Text style={styles.longestStreak}>LONGEST STREAK: {longestStreak} DAYS</Text>
+          <View style={styles.longestStreakRow}>
+            <Text style={styles.longestStreak}>LONGEST STREAK: </Text>
+            <Animated.Text style={[styles.longestStreakNum, { opacity: longestStreakNumOpacity }]}>{displayLongestStreak} DAYS</Animated.Text>
+          </View>
         </View>
       )}
 
@@ -705,17 +1090,14 @@ export default function HomeScreen({
               <Text style={styles.overlayBadgeUnit}>{activeMilestone.unit}</Text>
             </View>
           </View>
-          {activeMilestone.lines ? (
-            <View style={styles.badgeQuoteLines}>
-              {activeMilestone.lines.map((word) => (
-                <Text key={word} style={styles.badgeQuoteLine}>{word}</Text>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.badgeQuote}>{activeMilestone.quote}</Text>
-          )}
+          <View style={styles.badgeQuoteLines}>
+            {activeMilestone.lines.map((word) => (
+              <Text key={word} style={styles.badgeQuoteLine}>{word}</Text>
+            ))}
+          </View>
         </Animated.View>
       )}
+
     </View>
   );
 }
@@ -755,7 +1137,7 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.white,
     opacity: 0.5,
-    marginTop: 4,
+    marginTop: 10,
   },
   daysClean: {
     fontFamily: fonts.display,
@@ -775,6 +1157,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingTop: 24,
+    overflow: 'hidden',
   },
   sinceAndBadge: {
     position: 'absolute',
@@ -875,6 +1258,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   bottom: {
+    width: '100%',
     alignItems: 'center',
     gap: 10,
   },
@@ -883,12 +1267,24 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.white,
   },
+  longestStreakRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+  },
   longestStreak: {
     fontFamily: fonts.display,
     fontSize: 10,
     color: colors.white,
     opacity: 0.5,
     letterSpacing: 3,
+  },
+  longestStreakNum: {
+    fontFamily: fonts.display,
+    fontSize: 10,
+    color: colors.white,
+    opacity: 0.5,
+    letterSpacing: 3,
+    minWidth: 110,
   },
   // Confirmation overlay
   overlay: {
@@ -966,6 +1362,7 @@ const styles = StyleSheet.create({
     width: OVERLAY_BADGE_W,
     height: OVERLAY_BADGE_H,
     position: 'relative',
+    marginTop: 16,
   },
   overlayBadgeTextWrapper: {
     position: 'absolute',

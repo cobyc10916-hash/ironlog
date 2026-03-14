@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
+import { supabase } from '../lib/supabase';
 
 // ─── Constants ─────────────────────────────────────────────────────────────────
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -229,6 +230,66 @@ export default function LogHistoricalResetScreen({
 }) {
   const goBack = () => { navigation?.goBack(); onBack?.(); };
 
+  // ── Fetch install_date from Supabase on mount ─────────────────────────────────
+  const [fetchedInstallDate, setFetchedInstallDate] = useState(null);
+  const [installDateLoaded, setInstallDateLoaded]   = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('install_date')
+          .eq('id', user.id)
+          .single();
+        if (error) throw error;
+        if (data?.install_date) setFetchedInstallDate(data.install_date);
+      } catch (err) {
+        console.error('INSTALL_DATE_ERROR:', err);
+      } finally {
+        setInstallDateLoaded(true);
+      }
+    })();
+  }, []);
+
+  // ── Fetch existing reset dates from Supabase on mount ────────────────────────
+  const [resetDates, setResetDates] = useState(new Set());
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        const { data, error } = await supabase
+          .from('resets')
+          .select('reset_at, historical_date')
+          .eq('user_id', user.id);
+        if (error) throw error;
+        const dates = new Set(
+          (data || []).map(row => {
+            const src = row.historical_date || row.reset_at;
+            if (!src) return null;
+            // DATE-only strings (YYYY-MM-DD) must be used as-is — passing them through
+            // new Date() treats them as UTC midnight, which shifts the day in negative
+            // UTC offset timezones (all US timezones).
+            if (/^\d{4}-\d{2}-\d{2}$/.test(src)) return src;
+            // Full ISO timestamp — convert to local calendar date.
+            const d = new Date(src);
+            const y  = d.getFullYear();
+            const m  = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+          }).filter(Boolean),
+        );
+        setResetDates(dates);
+      } catch (err) {
+        console.error('RESET_DATES_FETCH_ERROR:', err);
+      }
+    })();
+  }, []);
+
   // ── Date bounds ──────────────────────────────────────────────────────────────
   const { minDate, yesterday, noDatesAvailable } = useMemo(() => {
     let today;
@@ -243,21 +304,21 @@ export default function LogHistoricalResetScreen({
     const yest = new Date(today);
     yest.setDate(yest.getDate() - 1);
 
+    const sourceInstallDate = fetchedInstallDate || installDate;
     let min;
-    if (installDate) {
-      const [iy, im, id] = installDate.split('-').map(Number);
+    if (sourceInstallDate) {
+      const [iy, im, id] = sourceInstallDate.split('-').map(Number);
       min = new Date(iy, im - 1, id, 0, 0, 0, 0);
+      // min = installDate itself (no offset)
     } else {
       min = new Date(today);
       min.setDate(min.getDate() - 90);
     }
 
-    const twoDaysAgo = new Date(today);
-    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
-    const noData = min >= twoDaysAgo;
+    const noData = min > yest;
 
     return { minDate: min, yesterday: yest, noDatesAvailable: noData };
-  }, [installDate, todayOverride]);
+  }, [fetchedInstallDate, installDate, todayOverride]);
 
   // ── Picker state ─────────────────────────────────────────────────────────────
   const [year,  setYear]  = useState(yesterday.getFullYear());
@@ -321,7 +382,8 @@ export default function LogHistoricalResetScreen({
   const displayDate     = `${MONTH_FULL[month - 1]} ${String(day).padStart(2, '0')} ${year}`;
   const dateString      = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   const isAlreadyLogged = relapseDays.has(dateString);
-  const isDisabled      = noDatesAvailable || isAlreadyLogged;
+  const isResetDate     = resetDates.has(dateString);
+  const isDisabled      = noDatesAvailable || isAlreadyLogged || isResetDate;
 
   // ── Hold-to-confirm mechanic ──────────────────────────────────────────────────
   const [buttonLayout, setButtonLayout] = useState({ width: 0, height: 0 });
@@ -384,13 +446,64 @@ export default function LogHistoricalResetScreen({
   });
 
   // ── Modal handlers ────────────────────────────────────────────────────────────
-  const handleYes = () => {
+  const handleYes = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     setShowModal(false);
     isComplete.current = false;
     progress.setValue(0);
+
     const payload = calculateResetData(dateString, cleanDays, relapseDays);
-    onConfirmReset?.(dateString, payload);
+    const selectedDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+    try {
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+
+      const { error: resetError } = await supabase
+        .from('resets')
+        .insert({
+          user_id: user.id,
+          reset_at: selectedDate.toISOString(),
+          streak_broken: payload.currentStreak,
+          was_historical: true,
+          historical_date: selectedDate.toISOString(),
+        });
+      if (resetError) throw resetError;
+
+      const { data: streakData, error: streakFetchError } = await supabase
+        .from('streaks')
+        .select('streak_start_date, longest_streak, current_streak')
+        .eq('user_id', user.id)
+        .single();
+      if (streakFetchError) throw streakFetchError;
+
+      const existingStartDate = new Date(streakData.streak_start_date);
+
+      if (selectedDate > existingStartDate) {
+        const now = new Date();
+        now.setHours(0, 0, 0, 0);
+        const newCurrentStreak = Math.floor((now - selectedDate) / 86400000);
+
+        const streakUpdate = { streak_start_date: selectedDate.toISOString(), current_streak: newCurrentStreak };
+        if (newCurrentStreak > streakData.longest_streak) {
+          streakUpdate.longest_streak = newCurrentStreak;
+        }
+
+        const { error: streakUpdateError } = await supabase
+          .from('streaks')
+          .update(streakUpdate)
+          .eq('user_id', user.id);
+        if (streakUpdateError) throw streakUpdateError;
+
+        onConfirmReset?.(dateString, { ...payload, currentStreak: newCurrentStreak });
+      } else {
+        onConfirmReset?.(dateString, payload);
+      }
+    } catch (err) {
+      console.error('HISTORICAL_RESET_ERROR:', err);
+      onConfirmReset?.(dateString, payload);
+    }
+
     goBack();
   };
 
@@ -427,9 +540,9 @@ export default function LogHistoricalResetScreen({
 
       {/* ── Picker area — instruction sits directly above picker ── */}
       <View style={styles.pickerArea}>
-        {noDatesAvailable ? (
-          <Text style={styles.noDatesText}>NO HISTORICAL DATES AVAILABLE</Text>
-        ) : (
+        {installDateLoaded && noDatesAvailable ? (
+          <Text style={styles.noDatesText}>NO PAST DATES TO LOG</Text>
+        ) : installDateLoaded ? (
           <View style={styles.pickerGroup}>
             <Text style={styles.instruction}>SELECT THE DATE YOU RELAPSED</Text>
             <View style={styles.pickerRow}>
@@ -461,20 +574,25 @@ export default function LogHistoricalResetScreen({
               />
             </View>
           </View>
-        )}
+        ) : null}
       </View>
 
       {/* ── Bottom ── */}
-      <View style={styles.bottom}>
+      {installDateLoaded && <View style={styles.bottom}>
         {isAlreadyLogged && (
           <Text style={styles.alreadyLoggedText}>ALREADY LOGGED AS A RELAPSE</Text>
         )}
+        {isResetDate && (
+          <Text style={styles.alreadyLoggedText}>RELAPSE ALREADY LOGGED FOR THIS DATE</Text>
+        )}
 
         {/* Fixed-height row keeps "LOG RELAPSE FOR:" bolted in place */}
-        <View style={styles.displayDateRow}>
-          <Text style={styles.displayDateLabel} numberOfLines={1}>{'LOG RELAPSE FOR:  '}</Text>
-          <Text style={styles.displayDateValue} numberOfLines={1}>{displayDate}</Text>
-        </View>
+        {!noDatesAvailable && !isAlreadyLogged && !isResetDate && (
+          <View style={styles.displayDateRow}>
+            <Text style={styles.displayDateLabel} numberOfLines={1}>{'LOG RELAPSE FOR:  '}</Text>
+            <Text style={styles.displayDateValue} numberOfLines={1}>{displayDate}</Text>
+          </View>
+        )}
 
         {/* Hold-to-confirm button */}
         <View style={[styles.holdWrapper, isDisabled && styles.holdWrapperDisabled]}>
@@ -522,7 +640,7 @@ export default function LogHistoricalResetScreen({
             </Text>
           )}
         </View>
-      </View>
+      </View>}
 
       {/* ── Confirmation Modal ── */}
       {showModal && (

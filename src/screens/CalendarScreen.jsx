@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useStreakContext } from '../context/StreakContext';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import CalendarGrid, { GRID_WIDTH } from '../components/CalendarGrid';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
+import { supabase } from '../lib/supabase';
 
 const MONTH_NAMES = [
   'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
@@ -21,15 +22,87 @@ function getTodayStr() {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-// App start: March 8 2026 — navigation cannot go earlier than March 2026
+// App start: March 2026 — navigation cannot go earlier than this
 const APP_START = { year: 2026, month: 3 };
-const JOIN_DATE_STRING = '2026-03-08';
-const EMPTY_SET = new Set();
+
+// Module-level cache — survives unmount/remount within an app session.
+// Eliminates the hollow-square flash on every calendar visit after the first.
+let _cachedJoinDate    = null;
+let _cachedCleanDays   = null;
+let _cachedRelapseDays = null;
 
 export default function CalendarScreen({ navigation }) {
-  const { cleanDays } = useStreakContext();
+  const { cleanDays, joinDateString: ctxJoinDateString, relapseDays: ctxRelapseDays } = useStreakContext();
   const now = new Date();
   const todayString = getTodayStr();
+
+  const [relapseDays, setRelapseDays] = useState(() => _cachedRelapseDays ?? ctxRelapseDays);
+  const [localCleanDays, setLocalCleanDays] = useState(() => _cachedCleanDays);
+  const [joinDateString, setJoinDateString] = useState(() => _cachedJoinDate ?? ctxJoinDateString);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+
+        const [
+          { data: relapseData,  error: relapseError  },
+          { data: profileData,  error: profileError  },
+          { data: streakData,   error: streakError   },
+        ] = await Promise.all([
+          supabase.from('resets').select('reset_at, historical_date').eq('user_id', user.id),
+          supabase.from('profiles').select('install_date').eq('id', user.id).single(),
+          supabase.from('streaks').select('streak_start_date, current_streak').eq('user_id', user.id).single(),
+        ]);
+
+        if (relapseError) {
+          console.error('CALENDAR_FETCH_ERROR (resets):', relapseError);
+        } else {
+          const dates = (relapseData || []).map(row => {
+            const src = row.historical_date || row.reset_at;
+            if (!src) return null;
+            if (/^\d{4}-\d{2}-\d{2}$/.test(src)) return src;
+            const d = new Date(src);
+            return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+          }).filter(Boolean);
+          _cachedRelapseDays = new Set(dates);
+          setRelapseDays(_cachedRelapseDays);
+        }
+
+        if (profileError) {
+          console.error('CALENDAR_FETCH_ERROR (profiles):', profileError);
+        } else if (profileData?.install_date) {
+          _cachedJoinDate = profileData.install_date;
+          setJoinDateString(_cachedJoinDate);
+        }
+
+        if (streakError) {
+          console.error('CALENDAR_FETCH_ERROR (streaks):', streakError);
+          _cachedCleanDays = new Set();
+          setLocalCleanDays(_cachedCleanDays);
+        } else if (streakData?.streak_start_date) {
+          const [sy, sm, sd] = streakData.streak_start_date.slice(0, 10).split('-').map(Number);
+          const sinceDate = new Date(sy, sm - 1, sd, 0, 0, 0, 0);
+          const streak = streakData.current_streak ?? 0;
+          const days = new Set();
+          for (let i = 1; i <= streak; i++) {
+            const d = new Date(sinceDate.getTime() + i * 86400000);
+            days.add(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`);
+          }
+          _cachedCleanDays = days;
+          setLocalCleanDays(_cachedCleanDays);
+        } else {
+          _cachedCleanDays = new Set();
+          setLocalCleanDays(_cachedCleanDays);
+        }
+      } catch (err) {
+        console.error('CALENDAR_FETCH_ERROR:', err);
+        _cachedCleanDays = new Set();
+        setLocalCleanDays(_cachedCleanDays);
+      }
+    })();
+  }, []);
 
   const [viewDate, setViewDate] = useState({
     year: now.getFullYear(),
@@ -92,10 +165,10 @@ export default function CalendarScreen({ navigation }) {
         <CalendarGrid
           year={viewYear}
           month={viewMonth}
-          cleanDays={cleanDays}
-          relapseDays={EMPTY_SET}
+          cleanDays={localCleanDays ?? cleanDays}
+          relapseDays={relapseDays}
           todayString={todayString}
-          joinDateString={JOIN_DATE_STRING}
+          joinDateString={joinDateString}
         />
       </View>
 

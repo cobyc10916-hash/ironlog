@@ -7,6 +7,7 @@ import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
 import { BADGE_DATA } from '../constants/badges';
 import { useStreakContext } from '../context/StreakContext';
+import { supabase } from '../lib/supabase';
 
 // ─── Sizing ────────────────────────────────────────────────────────────────────
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -111,27 +112,66 @@ const BadgeInsignia = memo(function BadgeInsignia({ number, unit, isEarned, isRe
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function BadgeScreen({ navigation }) {
-  const { streak: currentStreak } = useStreakContext();
+  const { clearPendingMilestone } = useStreakContext();
+  const [loading, setLoading] = useState(true);
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
 
-  const _nextBadge   = BADGE_DATA.find(b => b.days > currentStreak);
+  const _nextBadge   = BADGE_DATA.find(b => b.days > longestStreak);
   const PROGRESS_PCT = _nextBadge ? Math.min((currentStreak / _nextBadge.days) * 100, 100) : 100;
 
   const progressAnim = useRef(new Animated.Value(PROGRESS_PCT)).current;
   const newBadgeRevealAnim = useRef(new Animated.Value(0)).current;
   const [revealingBadgeDays, setRevealingBadgeDays] = useState(null);
   const [displayNextBadge, setDisplayNextBadge] = useState(_nextBadge);
-  // displayStreak lags behind currentStreak during a reveal so the badge stays dim until revealed
-  const [displayStreak, setDisplayStreak] = useState(currentStreak);
   const prevNextBadgeRef = useRef(_nextBadge);
-
-  const NEXT_LABEL = displayNextBadge
-    ? `${displayNextBadge.number} ${displayNextBadge.unit}`
-    : 'ALL EARNED';
-  const DAYS_LABEL = displayNextBadge
-    ? `${currentStreak} / ${displayNextBadge.days} DAYS`
-    : `${currentStreak} DAYS`;
+  const justLoadedRef = useRef(false);
+  const contentOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    async function fetchBadgeData() {
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        if (userError) throw userError;
+        if (!user) throw new Error('No authenticated user');
+
+        const [streaksResult, badgesResult] = await Promise.all([
+          supabase
+            .from('streaks')
+            .select('current_streak, longest_streak')
+            .eq('user_id', user.id)
+            .single(),
+          supabase
+            .from('badges')
+            .select('badge_key, earned_at')
+            .eq('user_id', user.id),
+        ]);
+
+        if (streaksResult.error) throw streaksResult.error;
+        if (badgesResult.error) throw badgesResult.error;
+
+        const { current_streak, longest_streak } = streaksResult.data ?? {};
+        setCurrentStreak(current_streak ?? 0);
+        setLongestStreak(longest_streak ?? 0);
+      } catch (err) {
+        console.error('BADGE_FETCH_ERROR:', err);
+      } finally {
+        justLoadedRef.current = true;
+        setLoading(false);
+      }
+    }
+
+    fetchBadgeData();
+  }, []);
+
+  useEffect(() => {
+    if (justLoadedRef.current) {
+      justLoadedRef.current = false;
+      progressAnim.setValue(PROGRESS_PCT);
+      setDisplayNextBadge(_nextBadge);
+      return;
+    }
+
     const prevNextBadge = prevNextBadgeRef.current;
     prevNextBadgeRef.current = _nextBadge;
 
@@ -140,6 +180,8 @@ export default function BadgeScreen({ navigation }) {
       // Immediately mark badge as revealing — start at 0.2 to match unearned opacity (seamless handoff)
       newBadgeRevealAnim.setValue(0.2);
       setRevealingBadgeDays(prevNextBadge.days);
+      // User is watching the reveal here — suppress the HomeScreen overlay for this milestone
+      clearPendingMilestone(prevNextBadge.days);
 
       Animated.timing(progressAnim, {
         toValue: 100,
@@ -158,7 +200,6 @@ export default function BadgeScreen({ navigation }) {
             // Hold badge fully visible, then transition to new progress target
             setTimeout(() => {
               setRevealingBadgeDays(null);
-              setDisplayStreak(currentStreak);
               setDisplayNextBadge(_nextBadge);
               Animated.timing(progressAnim, {
                 toValue: PROGRESS_PCT,
@@ -173,7 +214,6 @@ export default function BadgeScreen({ navigation }) {
       return;
     }
 
-    setDisplayStreak(currentStreak);
     setDisplayNextBadge(_nextBadge);
     Animated.timing(progressAnim, {
       toValue: PROGRESS_PCT,
@@ -183,7 +223,26 @@ export default function BadgeScreen({ navigation }) {
     }).start();
   }, [PROGRESS_PCT]);
 
+  useEffect(() => {
+    if (!loading) {
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [loading]);
+
+  const NEXT_LABEL = displayNextBadge
+    ? `${displayNextBadge.number} ${displayNextBadge.unit}`
+    : 'ALL EARNED';
+  const DAYS_LABEL = displayNextBadge
+    ? `${currentStreak} / ${displayNextBadge.days} DAYS`
+    : `${currentStreak} DAYS`;
+
   return (
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
+    <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
     <SafeAreaView style={styles.root}>
 
       <TouchableOpacity
@@ -231,7 +290,7 @@ export default function BadgeScreen({ navigation }) {
                 key={badge.days}
                 number={badge.number}
                 unit={badge.unit}
-                isEarned={badge.days <= displayStreak}
+                isEarned={badge.days <= longestStreak}
                 isRevealing={revealingBadgeDays === badge.days}
                 revealAnim={newBadgeRevealAnim}
               />
@@ -241,6 +300,8 @@ export default function BadgeScreen({ navigation }) {
       </ScrollView>
 
     </SafeAreaView>
+    </Animated.View>
+    </View>
   );
 }
 

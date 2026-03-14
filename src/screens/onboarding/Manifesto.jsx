@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Animated } from 'react-native';
+import { View, Text, StyleSheet, Animated, TouchableOpacity } from 'react-native';
 import { colors } from '../../constants/colors';
 
 const HEADER_WORDS = ['BREAKING', 'FREE', 'FROM'];
@@ -120,6 +120,16 @@ export default function Manifesto({ navigation }) {
         <Text style={[styles.startsNowText, { opacity: startsVisible ? 1 : 0 }]}>STARTS</Text>
         <Text style={[styles.startsNowText, styles.nowText, { opacity: nowVisible ? 1 : 0 }]}>NOW</Text>
       </View>
+
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.devSkip}
+          onPress={() => navigation?.navigate('Intensity')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devSkipText}>DEV SKIP</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -177,5 +187,21 @@ const styles = StyleSheet.create({
   nowText: {
     fontSize: 110,
     lineHeight: 128,
+  },
+  devSkip: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -16 }],
+    backgroundColor: 'red',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 4,
+    zIndex: 9999,
+  },
+  devSkipText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

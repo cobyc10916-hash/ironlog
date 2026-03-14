@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.ironlog.app",
+      "bundleIdentifier": "com.ironlog.disciplineapp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

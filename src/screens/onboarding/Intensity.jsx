@@ -7,6 +7,7 @@ import { colors } from '../../constants/colors';
 import { fonts } from '../../constants/fonts';
 import { useSettings } from '../../context/SettingsContext';
 import OnboardingProgress from '../../components/OnboardingProgress';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function Intensity({ navigation, route }) {
   const isEditing = route?.params?.isEditing === true;
@@ -18,6 +19,7 @@ export default function Intensity({ navigation, route }) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelected(option);
     setIntensity(option);
+    AsyncStorage.setItem('onboarding_intensity', option.toUpperCase());
     if (!isEditing) {
       navigation?.navigate('NotificationPermission');
     }
@@ -50,6 +52,15 @@ export default function Intensity({ navigation, route }) {
         </View>
       </View>
 
+      {__DEV__ && (
+        <TouchableOpacity
+          style={styles.devSkip}
+          onPress={() => navigation?.navigate('NotificationPermission')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.devSkipText}>DEV SKIP</Text>
+        </TouchableOpacity>
+      )}
     </SafeAreaView>
   );
 }
@@ -111,5 +122,21 @@ const styles = StyleSheet.create({
   },
   buttonTextSelected: {
     color: colors.background,
+  },
+  devSkip: {
+    position: 'absolute',
+    right: 12,
+    top: '50%',
+    transform: [{ translateY: -16 }],
+    backgroundColor: 'red',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 4,
+    zIndex: 9999,
+  },
+  devSkipText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
 });

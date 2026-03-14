@@ -47,10 +47,10 @@ export default function CalendarGrid({ year, month, cleanDays, relapseDays, toda
       if (joinDateString && ds < joinDateString) return 'before-join';
       // Future dates — nothing has happened yet
       if (ds > todayString) return 'before-join';
+      // Skull takes priority over everything — even the join date
+      if (relapseDays.has(ds) && ds <= todayString) return 'relapse';
       // Join date itself is always clean — it's day 1 of the streak
       if (joinDateString && ds === joinDateString) return 'clean';
-      // Skull only if relapse history AND not a future date
-      if (relapseDays.has(ds) && ds <= todayString) return 'relapse';
       if (cleanDays.has(ds)) return 'clean';
       // Opening the app marks today — today is never hollow
       if (ds === todayString) return 'clean';

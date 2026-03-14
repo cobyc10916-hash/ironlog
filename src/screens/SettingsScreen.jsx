@@ -14,8 +14,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Svg, { Path } from 'react-native-svg';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../constants/colors';
 import { fonts } from '../constants/fonts';
+import { supabase } from '../lib/supabase';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const H_PADDING = 20;
@@ -193,7 +195,6 @@ const DeleteConfirmModal = ({ visible, onYes, onNo }) => {
 
 // ─── Screen ────────────────────────────────────────────────────────────────────
 export default function SettingsScreen({
-  onSignOut,
   onDeleteAccount,
   onRestorePurchases,
   navigation,
@@ -212,7 +213,18 @@ export default function SettingsScreen({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     const type = modalType;
     closeModal();
-    if (type === 'signout') onSignOut?.();
+    if (type === 'signout') {
+      supabase.auth.signOut()
+        .then(({ error }) => {
+          if (error) {
+            console.error('SIGN_OUT_ERROR:', error);
+            return;
+          }
+          AsyncStorage.removeItem('@ironlog_shown_milestones').catch(() => {});
+          navigation?.navigate('Opening');
+        })
+        .catch(err => console.error('SIGN_OUT_ERROR:', err));
+    }
     if (type === 'delete') onDeleteAccount?.();
   };
 
@@ -252,7 +264,7 @@ export default function SettingsScreen({
         <View style={styles.group}>
           <SettingsRow
             label="LOG PAST RELAPSE"
-            onPress={() => navigation?.navigate('LogHistoricalReset')}
+            onPress={() => { console.log('NAVIGATION:', navigation); navigation?.navigate('LogHistoricalReset'); }}
           />
           <SettingsRow
             label="SIGN OUT"
